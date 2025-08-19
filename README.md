@@ -1,14 +1,21 @@
-## Image Text Translator
+# 🌐 Image Text Translator
 
-Translate text on images (e.g., manga/comics) directly on webpages using LLM. Adds a floating toggle, context menu entry, and overlays translated text boxes on top of images.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-blue.svg)](https://developer.chrome.com/docs/extensions/)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-### Features
+A powerful browser extension that translates text on images (manga, comics, screenshots, etc.) directly on webpages using multiple AI models. Features real-time translation overlays with support for **Google Gemini**, **OpenAI ChatGPT**, and **DeepSeek** models.
 
-- **Inline translate button**: Hover/scroll near images and click "Translate" to OCR + translate.
-- **Keyboard toggle**: Alt+T to enable/disable scanning on the current page.
-- **Context menu**: Right‑click an image → "Translate image with Gemini".
-- **Configurable**: Source/target language, model, overlay background/text colors, and opacity.
-- **On‑page overlays**: Translations are drawn with bounding boxes positioned over detected text.
+## ✨ Features
+
+- **🤖 Multi-Model Support**: Choose between Gemini, ChatGPT, and DeepSeek AI models
+- **🎯 One-Click Translation**: Floating translate buttons appear on images automatically
+- **⌨️ Keyboard Shortcuts**: Alt+T to toggle translation mode on/off
+- **🖱️ Context Menu**: Right-click any image to translate instantly
+- **🎨 Customizable Overlays**: Adjust colors, opacity, and positioning of translation boxes
+- **🌍 Multi-Language**: Support for Japanese, Korean, Chinese, and many target languages
+- **📱 Cross-Browser**: Works on Chrome, Edge, and other Chromium-based browsers
+- **🔒 Privacy-First**: API keys stored locally, no data collection
 
 ## Installation (Chromium browsers)
 
@@ -21,36 +28,79 @@ Translate text on images (e.g., manga/comics) directly on webpages using LLM. Ad
 
 After loading, you should see the extension icon in the toolbar.
 
-## Setup
+## 🚀 Quick Start
 
-1. Click the extension icon to open the popup, or open Options.
-2. **Enter your  API key**.
-   -Eg, Get one from Google AI Studio: `https://makersuite.google.com/app/apikey`.
-3. Choose source and target languages.
-4. Optionally select model (`gemini-1.5-flash` or `gemini-1.5-pro`) and adjust overlay styles.
-5. Click **Save**.
+### 1. Choose Your AI Provider
 
-## Usage
+Select one of the supported AI models and get an API key:
 
-- **Toggle On/Off**: Use the popup button or press Alt+T.
-- **Translate an image**: When active, click the floating "Translate" button that appears near large images.
-- **Right‑click translate**: Context menu → "Translate image with Gemini" works even if auto‑scan fails.
-- **Overlays**: Translations render as small boxes. Colors/opacity are configurable in Options.
+| Provider | Models Available | Get API Key |
+|----------|------------------|-------------|
+| **Google Gemini** | 1.5 Flash, 1.5 Pro | [Google AI Studio](https://makersuite.google.com/app/apikey) |
+| **OpenAI ChatGPT** | GPT-4o, GPT-4o Mini, GPT-4 Turbo | [OpenAI Platform](https://platform.openai.com/api-keys) |
+| **DeepSeek** | Chat, Coder | [DeepSeek Platform](https://platform.deepseek.com/api_keys) |
 
-## Options
+### 2. Configure the Extension
 
-- **API Key**: Required to call the model.
-- **Source Language**: `ja`, `ko`, `zh`, or `auto`.
-- **Target Language**: e.g., `en`, `es`, `fr`, `de`, `pt`.
-- **Model**: `gemini-1.5-flash` (faster) or `gemini-1.5-pro` (higher quality).
-- **Overlay Styles**: Background color, text color, and background opacity.
+1. Click the extension icon in your browser toolbar
+2. Click **⚙️Settings** to expand the configuration panel
+3. Select your preferred **AI Model Provider**
+4. Enter your **API Key** for the chosen provider
+5. Choose **Source Language** (Japanese, Korean, Chinese, or Auto-detect)
+6. Choose **Target Language** (English, Spanish, French, German, Portuguese, etc.)
+7. Select specific **Model** (optional - defaults will work fine)
+8. Customize overlay appearance if desired
+9. Click **Save Settings**
 
-## How it works
+## 📖 How to Use
 
-- The content script scans for sufficiently large images and injects a small "Translate" button.
-- On click, the background service worker fetches the image bytes (CORS) or screenshots/crops the page as a fallback.
-- The image is sent to Gemini with a structured prompt requesting OCR + translation + bounding boxes.
-- The content script overlays translated text boxes positioned by percentage coordinates returned from the model.
+### Basic Usage
+1. **Activate Translation**: Click the extension icon and toggle "Translator: On" or press `Alt+T`
+2. **Translate Images**: Hover over images to see translate buttons appear, then click to translate
+3. **View Results**: Translation overlays will appear on top of the original text
+
+### Advanced Features
+- **Bulk Translation**: Click "Translate All Texts" to process all images on the page
+- **Context Menu**: Right-click any image → "Translate image" for direct translation
+- **Keyboard Toggle**: Press `Alt+T` anywhere on the page to enable/disable
+- **Custom Styling**: Adjust overlay colors and opacity in settings
+
+### Supported Content
+- 📚 Manga and comics
+- 🎮 Game screenshots
+- 📱 Social media images with text
+- 📄 Document screenshots
+- 🖼️ Any image with readable text
+
+## ⚙️ Configuration Options
+
+### AI Model Settings
+- **Model Provider**: Choose between Gemini, OpenAI, or DeepSeek
+- **API Keys**: Separate secure storage for each provider
+- **Specific Models**: Fine-tune model selection per provider
+
+### Language Settings
+- **Source Languages**: Japanese (`ja`), Korean (`ko`), Chinese (`zh`), Auto-detect (`auto`)
+- **Target Languages**: English (`en`), Spanish (`es`), French (`fr`), German (`de`), Portuguese (`pt`), and more
+
+### Visual Customization
+- **Overlay Colors**: Customize background and text colors
+- **Opacity Control**: Adjust transparency (0-100%)
+- **Positioning**: Automatic smart positioning over detected text
+
+## 🔧 Technical Architecture
+
+### How It Works
+1. **Image Detection**: Content script scans for images ≥120px and injects translate buttons
+2. **Image Processing**: Background worker fetches image data or captures screenshots as fallback
+3. **AI Processing**: Images sent to selected AI provider with OCR + translation prompts
+4. **Result Rendering**: Translation overlays positioned using AI-provided bounding box coordinates
+
+### Multi-Model Support
+- **Gemini**: Uses Google's Generative Language API
+- **OpenAI**: Leverages Chat Completions API with vision capabilities
+- **DeepSeek**: Integrates with DeepSeek's vision-enabled chat API
+- **Unified Interface**: Consistent experience regardless of chosen provider
 
 ## Permissions
 
@@ -67,28 +117,105 @@ Declared in `manifest.json`:
 - **Network**: Images are sent to Google's Gemini API for OCR/translation.
 - **No analytics/telemetry**: The extension does not collect personal data.
 
-## Development
+## 🛠️ Development
 
-- No build step; the code is plain JS/HTML/CSS.
-- Edit files under the `translator_image` directory, then reload the extension at `chrome://extensions/`.
-- Background script is a service worker (Manifest V3); after edits, click **Reload** on the extension card.
+### Prerequisites
+- Node.js (for development tools, optional)
+- Chromium-based browser (Chrome, Edge, etc.)
+- Text editor or IDE
 
-### File overview
+### Local Development Setup
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Abhivera/image_text_translator_extension.git
+   cd image-text-translator
+   ```
 
-- `manifest.json`: Extension metadata and permissions.
-- `background.js`: Stores settings, fetches images, calls Gemini, context menu.
-- `content.js`: Injects UI, handles on‑page overlays and keyboard toggle.
-- `popup.html` / `popup.js`: Quick controls and settings.
-- `options.html` / `options.js`: Full settings page.
+2. **Load extension in browser**:
+   - Open `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked" and select the project directory
 
-## Troubleshooting
+3. **Make changes**:
+   - Edit files directly (no build step required)
+   - Click "Reload" on the extension card after changes
+   - Background script changes require extension reload
 
-- **Missing API key**: Set it in Options or the popup; otherwise requests will fail.
-- **CORS fetch fails**: The extension falls back to screenshot + crop when possible.
-- **No overlay appears**: Ensure Alt+T is toggled on and the image is large enough (>= ~120px each dimension).
-- **Service worker not updating**: Reload the extension from `chrome://extensions/`.
-- **Rate limits/quotas**: Check your Gemini API quota in Google AI Studio.
+### Project Structure
+```
+translator_image/
+├── manifest.json          # Extension configuration
+├── background.js          # Service worker, API calls, settings
+├── content.js            # Page injection, UI, overlays
+├── popup.html/js         # Extension popup interface
+├── options.html/js       # Full settings page
+├── icons/               # Extension icons
+└── README.md           # This file
+```
 
+### Key Components
+- **Background Script**: Handles API routing, settings storage, context menus
+- **Content Script**: Manages on-page UI, image detection, overlay rendering
+- **Popup Interface**: Quick controls and settings management
+- **Options Page**: Comprehensive configuration interface
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how you can help:
+
+### Ways to Contribute
+- 🐛 **Bug Reports**: Open an issue with details and reproduction steps
+- 💡 **Feature Requests**: Suggest new features or improvements
+- 🔧 **Code Contributions**: Submit pull requests with bug fixes or new features
+- 📖 **Documentation**: Help improve README, code comments, or add examples
+- 🌍 **Translations**: Add support for more languages
+
+### Development Guidelines
+1. **Fork the repository** and create a feature branch
+2. **Follow existing code style** and conventions
+3. **Test thoroughly** across different browsers and scenarios
+4. **Update documentation** for any new features
+5. **Submit a pull request** with clear description of changes
+
+### Code Style
+- Use consistent indentation (2 spaces)
+- Add comments for complex logic
+- Follow JavaScript ES6+ standards
+- Keep functions focused and modular
+
+## 🐛 Troubleshooting
+
+### Common Issues
+| Problem | Solution |
+|---------|----------|
+| **Missing API key error** | Configure API key in Settings for your chosen provider |
+| **No translate buttons appear** | Press Alt+T to enable, ensure images are ≥120px |
+| **CORS fetch fails** | Extension automatically falls back to screenshot method |
+| **Translations don't appear** | Check API key validity and quota limits |
+| **Extension not updating** | Reload extension from `chrome://extensions/` |
+
+### API-Specific Issues
+- **Gemini**: Check quota at [Google AI Studio](https://makersuite.google.com/)
+- **OpenAI**: Verify credits and rate limits at [OpenAI Platform](https://platform.openai.com/)
+- **DeepSeek**: Check account status at [DeepSeek Platform](https://platform.deepseek.com/)
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Thanks to all contributors who help improve this project
+- Inspired by the need for accessible manga and comic translation
+- Built with modern web extension APIs and AI vision models
+
+## 📞 Support
+
+- 📋 **Issues**: [GitHub Issues](https://github.com/Abhivera/image_text_translator_extension/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/Abhivera/image_text_translator_extension/discussions)
+- 📧 **Email**: abhijitakadeveloper@gmail.com
 
 ---
+
+**⭐ If you find this project helpful, please consider giving it a star on GitHub!**
 

@@ -4,7 +4,10 @@
 // - Returns structured results with bounding boxes in percentages
 
 const DEFAULT_SETTINGS = {
-  apiKey: "",
+  modelProvider: "gemini",
+  geminiApiKey: "",
+  openaiApiKey: "",
+  deepseekApiKey: "",
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
@@ -108,6 +111,145 @@ function buildPrompt(sourceLanguage, targetLanguage) {
   );
 }
 
+async function callOpenAI({
+  apiKey,
+  model,
+  base64,
+  mime,
+  sourceLanguage,
+  targetLanguage,
+}) {
+  const url = "https://api.openai.com/v1/chat/completions";
+  const prompt = buildPrompt(sourceLanguage, targetLanguage);
+
+  const body = {
+    model: model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${mime};base64,${base64}`,
+              detail: "high"
+            }
+          }
+        ]
+      }
+    ],
+    max_tokens: 1024,
+    temperature: 0.1
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `OpenAI request failed: ${response.status} ${response.statusText} ${text}`
+    );
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content || "";
+
+  return parseVisionResponse(content);
+}
+
+async function callDeepSeek({
+  apiKey,
+  model,
+  base64,
+  mime,
+  sourceLanguage,
+  targetLanguage,
+}) {
+  const url = "https://api.deepseek.com/chat/completions";
+  const prompt = buildPrompt(sourceLanguage, targetLanguage);
+
+  const body = {
+    model: model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${mime};base64,${base64}`,
+              detail: "high"
+            }
+          }
+        ]
+      }
+    ],
+    max_tokens: 1024,
+    temperature: 0.1
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `DeepSeek request failed: ${response.status} ${response.statusText} ${text}`
+    );
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content || "";
+
+  return parseVisionResponse(content);
+}
+
+function parseVisionResponse(content) {
+  // Try to parse as strict JSON; if the model returned extra text, extract the first JSON object
+  let jsonText = content.trim();
+  const match = jsonText.match(/\{[\s\S]*\}/);
+  if (match) jsonText = match[0];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (e) {
+    // Fallback to a minimal schema if parsing fails
+    parsed = { texts: [] };
+  }
+
+  if (!parsed || !Array.isArray(parsed.texts)) {
+    parsed = { texts: [] };
+  }
+
+  // Normalize items and clamp values
+  parsed.texts = parsed.texts.map((t) => ({
+    source: String(t.source || t.japanese || t.original || ""),
+    translation: String(t.translation || t.english || t.translated || ""),
+    x: Math.max(0, Math.min(100, Number(t.x ?? 0))),
+    y: Math.max(0, Math.min(100, Number(t.y ?? 0))),
+    width: Math.max(0, Math.min(100, Number(t.width ?? 20))),
+    height: Math.max(0, Math.min(100, Number(t.height ?? 10))),
+  }));
+
+  return parsed;
+}
+
 async function callGeminiVision({
   apiKey,
   model,
@@ -159,34 +301,48 @@ async function callGeminiVision({
   const data = await response.json();
   const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-  // Try to parse as strict JSON; if the model returned extra text, extract the first JSON object
-  let jsonText = content.trim();
-  const match = jsonText.match(/\{[\s\S]*\}/);
-  if (match) jsonText = match[0];
+  return parseVisionResponse(content);
+}
 
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    // Fallback to a minimal schema if parsing fails
-    parsed = { texts: [] };
+async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguage) {
+  const { modelProvider } = settings;
+  const apiKey = settings[`${modelProvider}ApiKey`];
+  
+  if (!apiKey) {
+    throw new Error(`Missing ${modelProvider.toUpperCase()} API key. Set it in the Settings.`);
   }
 
-  if (!parsed || !Array.isArray(parsed.texts)) {
-    parsed = { texts: [] };
+  switch (modelProvider) {
+    case "gemini":
+      return await callGeminiVision({
+        apiKey,
+        model: settings.model || DEFAULT_SETTINGS.model,
+        base64,
+        mime,
+        sourceLanguage,
+        targetLanguage,
+      });
+    case "openai":
+      return await callOpenAI({
+        apiKey,
+        model: settings.model || "gpt-4o-mini",
+        base64,
+        mime,
+        sourceLanguage,
+        targetLanguage,
+      });
+    case "deepseek":
+      return await callDeepSeek({
+        apiKey,
+        model: settings.model || "deepseek-chat",
+        base64,
+        mime,
+        sourceLanguage,
+        targetLanguage,
+      });
+    default:
+      throw new Error(`Unsupported model provider: ${modelProvider}`);
   }
-
-  // Normalize items and clamp values
-  parsed.texts = parsed.texts.map((t) => ({
-    source: String(t.source || t.japanese || t.original || ""),
-    translation: String(t.translation || t.english || t.translated || ""),
-    x: Math.max(0, Math.min(100, Number(t.x ?? 0))),
-    y: Math.max(0, Math.min(100, Number(t.y ?? 0))),
-    width: Math.max(0, Math.min(100, Number(t.width ?? 20))),
-    height: Math.max(0, Math.min(100, Number(t.height ?? 10))),
-  }));
-
-  return parsed;
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -242,8 +398,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const settings = await getSettings();
-        if (!settings.apiKey) {
-          throw new Error("Missing API key. Set it in the Settings.");
+        const { modelProvider } = settings;
+        const apiKey = settings[`${modelProvider}ApiKey`];
+        
+        if (!apiKey) {
+          throw new Error(`Missing ${modelProvider.toUpperCase()} API key. Set it in the Settings.`);
         }
 
         const {
@@ -282,20 +441,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
         }
-        const result = await callGeminiVision({
-          apiKey: settings.apiKey,
-          model: settings.model || DEFAULT_SETTINGS.model,
+        const result = await callAIModel(
+          settings,
           base64,
           mime,
-          sourceLanguage:
-            overrideSourceLanguage ||
+          overrideSourceLanguage ||
             settings.sourceLanguage ||
             DEFAULT_SETTINGS.sourceLanguage,
-          targetLanguage:
-            overrideTargetLanguage ||
+          overrideTargetLanguage ||
             settings.targetLanguage ||
-            DEFAULT_SETTINGS.targetLanguage,
-        });
+            DEFAULT_SETTINGS.targetLanguage
+        );
         sendResponse({ ok: true, result });
       } catch (err) {
         sendResponse({
@@ -314,24 +470,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "translate-image" && info.srcUrl) {
     try {
       const settings = await getSettings();
-      if (!settings.apiKey) {
+      const { modelProvider } = settings;
+      const apiKey = settings[`${modelProvider}ApiKey`];
+      
+      if (!apiKey) {
         await chrome.tabs.sendMessage(tab.id, {
           type: "MT_NOTIFY",
-          payload: { message: "Set API key in Settings" },
+          payload: { message: `Set ${modelProvider.toUpperCase()} API key in Settings` },
         });
         return;
       }
       const { base64, mime } = await fetchImageAsBase64(info.srcUrl);
-      const result = await callGeminiVision({
-        apiKey: settings.apiKey,
-        model: settings.model || DEFAULT_SETTINGS.model,
+      const result = await callAIModel(
+        settings,
         base64,
         mime,
-        sourceLanguage:
-          settings.sourceLanguage || DEFAULT_SETTINGS.sourceLanguage,
-        targetLanguage:
-          settings.targetLanguage || DEFAULT_SETTINGS.targetLanguage,
-      });
+        settings.sourceLanguage || DEFAULT_SETTINGS.sourceLanguage,
+        settings.targetLanguage || DEFAULT_SETTINGS.targetLanguage
+      );
       await chrome.tabs.sendMessage(tab.id, {
         type: "MT_OVERLAY_RESULT",
         payload: { url: info.srcUrl, result },

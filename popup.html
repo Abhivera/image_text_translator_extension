@@ -261,7 +261,7 @@
         </div>
 
         <div class="subtext muted" style="margin-top: 10px">
-          Tip: Choose LLM model and API key in settings.
+          Tip: Select your preferred AI provider and configure API keys in settings.
         </div>
       </div>
 
@@ -273,17 +273,59 @@
         <div class="title">Settings</div>
         <div class="subtext">These apply immediately for the extension.</div>
 
-        <label for="apiKey" style="margin-top: 12px">API Key</label>
-        <input id="apiKey" type="password" placeholder="AIza..." />
-        <div class="subtext" style="margin-top: 6px">
-          Get one from
-          <a
-            class="link"
-            href="https://makersuite.google.com/app/apikey"
-            target="_blank"
-            rel="noreferrer noopener"
-            >Google AI Studio</a
-          >
+        <label for="modelProvider" style="margin-top: 12px">AI Model Provider</label>
+        <select id="modelProvider">
+          <option value="gemini">Google Gemini</option>
+          <option value="openai">OpenAI ChatGPT</option>
+          <option value="deepseek">DeepSeek</option>
+        </select>
+
+        <!-- Gemini API Key -->
+        <div id="geminiApiSection">
+          <label for="geminiApiKey" style="margin-top: 10px">Gemini API Key</label>
+          <input id="geminiApiKey" type="password" placeholder="AIza..." />
+          <div class="subtext" style="margin-top: 6px">
+            Get one from
+            <a
+              class="link"
+              href="https://makersuite.google.com/app/apikey"
+              target="_blank"
+              rel="noreferrer noopener"
+              >Google AI Studio</a
+            >
+          </div>
+        </div>
+
+        <!-- OpenAI API Key -->
+        <div id="openaiApiSection" style="display: none">
+          <label for="openaiApiKey" style="margin-top: 10px">OpenAI API Key</label>
+          <input id="openaiApiKey" type="password" placeholder="sk-..." />
+          <div class="subtext" style="margin-top: 6px">
+            Get one from
+            <a
+              class="link"
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noreferrer noopener"
+              >OpenAI Platform</a
+            >
+          </div>
+        </div>
+
+        <!-- DeepSeek API Key -->
+        <div id="deepseekApiSection" style="display: none">
+          <label for="deepseekApiKey" style="margin-top: 10px">DeepSeek API Key</label>
+          <input id="deepseekApiKey" type="password" placeholder="sk-..." />
+          <div class="subtext" style="margin-top: 6px">
+            Get one from
+            <a
+              class="link"
+              href="https://platform.deepseek.com/api_keys"
+              target="_blank"
+              rel="noreferrer noopener"
+              >DeepSeek Platform</a
+            >
+          </div>
         </div>
 
         <div class="row" style="margin-top: 10px">
@@ -308,10 +350,18 @@
           </div>
         </div>
 
-        <label for="model" style="margin-top: 10px">Model</label>
+        <label for="model" style="margin-top: 10px">Specific Model</label>
         <select id="model">
-          <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-          <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+          <!-- Gemini models -->
+          <option value="gemini-1.5-flash" data-provider="gemini">Gemini 1.5 Flash</option>
+          <option value="gemini-1.5-pro" data-provider="gemini">Gemini 1.5 Pro</option>
+          <!-- OpenAI models -->
+          <option value="gpt-4o" data-provider="openai" style="display: none">GPT-4o</option>
+          <option value="gpt-4o-mini" data-provider="openai" style="display: none">GPT-4o Mini</option>
+          <option value="gpt-4-turbo" data-provider="openai" style="display: none">GPT-4 Turbo</option>
+          <!-- DeepSeek models -->
+          <option value="deepseek-chat" data-provider="deepseek" style="display: none">DeepSeek Chat</option>
+          <option value="deepseek-coder" data-provider="deepseek" style="display: none">DeepSeek Coder</option>
         </select>
 
         <div class="row" style="margin-top: 10px">

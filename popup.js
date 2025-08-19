@@ -1,5 +1,8 @@
 const DEFAULTS = {
-  apiKey: "",
+  modelProvider: "gemini",
+  geminiApiKey: "",
+  openaiApiKey: "",
+  deepseekApiKey: "",
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
@@ -49,7 +52,10 @@ async function init() {
 
   const toggleBtn = document.getElementById("toggleActive");
   const translateAllBtn = document.getElementById("translateAll");
-  const apiKeyInput = document.getElementById("apiKey");
+  const modelProviderSelect = document.getElementById("modelProvider");
+  const geminiApiKeyInput = document.getElementById("geminiApiKey");
+  const openaiApiKeyInput = document.getElementById("openaiApiKey");
+  const deepseekApiKeyInput = document.getElementById("deepseekApiKey");
   const sourceSelect = document.getElementById("sourceLanguage");
   const targetSelect = document.getElementById("targetLanguage");
   const modelSelect = document.getElementById("model");
@@ -96,11 +102,54 @@ toggleBtn.addEventListener("click", async () => {
     }
   });
 
+  // Function to show/hide API key sections based on provider
+  function updateApiKeySections(provider) {
+    const sections = {
+      gemini: document.getElementById("geminiApiSection"),
+      openai: document.getElementById("openaiApiSection"),
+      deepseek: document.getElementById("deepseekApiSection")
+    };
+    
+    Object.keys(sections).forEach(key => {
+      if (sections[key]) {
+        sections[key].style.display = key === provider ? "block" : "none";
+      }
+    });
+    
+    // Update model options based on provider
+    const modelOptions = modelSelect.querySelectorAll("option");
+    modelOptions.forEach(option => {
+      const optionProvider = option.getAttribute("data-provider");
+      if (optionProvider) {
+        option.style.display = optionProvider === provider ? "block" : "none";
+      }
+    });
+    
+    // Set default model for provider
+    const defaultModels = {
+      gemini: "gemini-1.5-flash",
+      openai: "gpt-4o-mini",
+      deepseek: "deepseek-chat"
+    };
+    
+    if (modelSelect && defaultModels[provider]) {
+      modelSelect.value = defaultModels[provider];
+    }
+  }
+
   // Load current settings into quick settings form
   const currentSettings = await new Promise((resolve) =>
     chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
   );
-  if (apiKeyInput) apiKeyInput.value = currentSettings.apiKey || "";
+  
+  if (modelProviderSelect) {
+    modelProviderSelect.value = currentSettings.modelProvider || "gemini";
+    updateApiKeySections(currentSettings.modelProvider || "gemini");
+  }
+  
+  if (geminiApiKeyInput) geminiApiKeyInput.value = currentSettings.geminiApiKey || "";
+  if (openaiApiKeyInput) openaiApiKeyInput.value = currentSettings.openaiApiKey || "";
+  if (deepseekApiKeyInput) deepseekApiKeyInput.value = currentSettings.deepseekApiKey || "";
   if (sourceSelect) sourceSelect.value = currentSettings.sourceLanguage || "ja";
   if (targetSelect) targetSelect.value = currentSettings.targetLanguage || "en";
   if (modelSelect)
@@ -117,12 +166,22 @@ toggleBtn.addEventListener("click", async () => {
   if (opacityValue && opacityInput) {
     opacityValue.textContent = `${opacityInput.value}%`;
   }
+  
+  // Add event listener for model provider changes
+  if (modelProviderSelect) {
+    modelProviderSelect.addEventListener("change", () => {
+      updateApiKeySections(modelProviderSelect.value);
+    });
+  }
 
   // Save settings handler
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       const payload = {
-        apiKey: (apiKeyInput?.value || "").trim(),
+        modelProvider: modelProviderSelect?.value || "gemini",
+        geminiApiKey: (geminiApiKeyInput?.value || "").trim(),
+        openaiApiKey: (openaiApiKeyInput?.value || "").trim(),
+        deepseekApiKey: (deepseekApiKeyInput?.value || "").trim(),
         sourceLanguage: sourceSelect?.value || "ja",
         targetLanguage: targetSelect?.value || "en",
         model: modelSelect?.value || "gemini-1.5-flash",

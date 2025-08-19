@@ -9,7 +9,11 @@
   let bulkAbort = false;
   let isCurrentTabActive = true;
   let settings = {
-    apiKey: "",
+    modelProvider: "gemini",
+    geminiApiKey: "",
+    openaiApiKey: "",
+    deepseekApiKey: "",
+    model: "gemini-1.5-flash",
     sourceLanguage: "ja",
     targetLanguage: "en",
     overlayBgColor: "#ffffff",
@@ -101,7 +105,7 @@
         right: 14px;
         bottom: 14px;
         z-index: 2147483647;
-        background: rgba(17,17,17,0.85);
+        background: rgba(81, 66, 66, 0.85);
         color: #fff;
         padding: 8px 10px;
         border-radius: 999px;
@@ -526,7 +530,11 @@
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== "local") return;
         const keys = [
-          "apiKey",
+          "modelProvider",
+          "geminiApiKey",
+          "openaiApiKey",
+          "deepseekApiKey",
+          "model",
           "sourceLanguage",
           "targetLanguage",
           "overlayBgColor",
