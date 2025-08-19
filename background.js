@@ -11,7 +11,49 @@ const DEFAULT_SETTINGS = {
   overlayBgColor: "#ffffff",
   overlayBgOpacity: 95,
   overlayTextColor: "#111111",
+  autoTranslateAll: false,
+  enableByDefault: false,
 };
+
+// Track sparkle intervals per tab (legacy; kept for cleanup safety)
+const tabSparkleIntervals = new Map();
+
+// Track per-tab translator enabled state
+const tabEnabledState = new Map();
+
+function stopSparkle(tabId) {
+  const h = tabSparkleIntervals.get(tabId);
+  if (h) {
+    clearInterval(h);
+    tabSparkleIntervals.delete(tabId);
+  }
+  try {
+    chrome.action.setBadgeText({ tabId, text: "" });
+  } catch {}
+}
+
+function isTabEnabled(tabId) {
+  return tabEnabledState.get(tabId) || false;
+}
+
+function setTabEnabled(tabId, enabled) {
+  if (enabled) {
+    tabEnabledState.set(tabId, true);
+    startSparkle(tabId);
+  } else {
+    tabEnabledState.delete(tabId);
+    stopSparkle(tabId);
+  }
+}
+
+function startSparkle(tabId) {
+  // No blinking; just a static star badge while active
+  stopSparkle(tabId);
+  try {
+    chrome.action.setBadgeBackgroundColor({ tabId, color: "#0284c7" }); // sky-600
+    chrome.action.setBadgeText({ tabId, text: "★" });
+  } catch {}
+}
 
 function getSettings() {
   return new Promise((resolve) => {
@@ -97,7 +139,7 @@ async function callGeminiVision({
       temperature: 0.1,
       topK: 32,
       topP: 1,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 1024,
     },
   };
 
@@ -147,12 +189,48 @@ async function callGeminiVision({
   return parsed;
 }
 
+chrome.runtime.onInstalled.addListener(() => {
+  try {
+    chrome.contextMenus.create({
+      id: "translate-image",
+      title: "Translate image with Gemini",
+      contexts: ["image"],
+    });
+  } catch {}
+  try {
+    chrome.contextMenus.create({
+      id: "translate-all-images",
+      title: "Translate all images on page",
+      contexts: ["page"],
+    });
+  } catch {}
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  stopSparkle(tabId);
+  tabEnabledState.delete(tabId);
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return;
 
   if (message.type === "GET_SETTINGS") {
     getSettings().then(sendResponse);
     return true;
+  }
+
+  if (message.type === "GET_TAB_ENABLED") {
+    const tabId = sender?.tab?.id;
+    sendResponse({ ok: true, enabled: isTabEnabled(tabId) });
+    return;
+  }
+
+  if (message.type === "SET_TAB_ENABLED") {
+    const tabId = sender?.tab?.id;
+    const enabled = Boolean(message.enabled);
+    setTabEnabled(tabId, enabled);
+    sendResponse({ ok: true, enabled: isTabEnabled(tabId) });
+    return;
   }
 
   if (message.type === "SET_SETTINGS") {
@@ -165,9 +243,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         const settings = await getSettings();
         if (!settings.apiKey) {
-          throw new Error(
-            "Missing Gemini API key. Set it in the extension options."
-          );
+          throw new Error("Missing API key. Set it in the Settings.");
         }
 
         const {
@@ -232,53 +308,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Context menu: right-click → Translate this image
-chrome.runtime.onInstalled.addListener(() => {
-  try {
-    chrome.contextMenus.create({
-      id: "translate-image",
-      title: "Translate image with Gemini",
-      contexts: ["image"],
-    });
-  } catch {}
-});
-
+// Context menu: right-click → Translate this image or the whole page
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "translate-image" || !info.srcUrl || !tab?.id) return;
-  try {
-    const settings = await getSettings();
-    if (!settings.apiKey) {
-      await chrome.tabs.sendMessage(tab.id, {
-        type: "MT_NOTIFY",
-        payload: { message: "Set Gemini API key in extension options" },
-      });
-      return;
-    }
-    const { base64, mime } = await fetchImageAsBase64(info.srcUrl);
-    const result = await callGeminiVision({
-      apiKey: settings.apiKey,
-      model: settings.model || DEFAULT_SETTINGS.model,
-      base64,
-      mime,
-      sourceLanguage:
-        settings.sourceLanguage || DEFAULT_SETTINGS.sourceLanguage,
-      targetLanguage:
-        settings.targetLanguage || DEFAULT_SETTINGS.targetLanguage,
-    });
-    await chrome.tabs.sendMessage(tab.id, {
-      type: "MT_OVERLAY_RESULT",
-      payload: { url: info.srcUrl, result },
-    });
-  } catch (err) {
+  if (!tab?.id) return;
+  if (info.menuItemId === "translate-image" && info.srcUrl) {
     try {
-      await chrome.tabs.sendMessage(tab.id, {
-        type: "MT_NOTIFY",
-        payload: {
-          message: `Translate failed: ${String(
-            err && err.message ? err.message : err
-          )}`,
-        },
+      const settings = await getSettings();
+      if (!settings.apiKey) {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: "MT_NOTIFY",
+          payload: { message: "Set API key in Settings" },
+        });
+        return;
+      }
+      const { base64, mime } = await fetchImageAsBase64(info.srcUrl);
+      const result = await callGeminiVision({
+        apiKey: settings.apiKey,
+        model: settings.model || DEFAULT_SETTINGS.model,
+        base64,
+        mime,
+        sourceLanguage:
+          settings.sourceLanguage || DEFAULT_SETTINGS.sourceLanguage,
+        targetLanguage:
+          settings.targetLanguage || DEFAULT_SETTINGS.targetLanguage,
       });
+      await chrome.tabs.sendMessage(tab.id, {
+        type: "MT_OVERLAY_RESULT",
+        payload: { url: info.srcUrl, result },
+      });
+    } catch (err) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: "MT_NOTIFY",
+          payload: {
+            message: `Translate failed: ${String(
+              err && err.message ? err.message : err
+            )}`,
+          },
+        });
+      } catch {}
+    }
+    return;
+  }
+
+  if (info.menuItemId === "translate-all-images") {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "MT_TRANSLATE_ALL_NOW" });
     } catch {}
   }
 });

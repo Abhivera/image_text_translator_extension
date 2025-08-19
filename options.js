@@ -6,6 +6,7 @@ const DEFAULTS = {
   overlayBgColor: "#ffffff",
   overlayBgOpacity: 95,
   overlayTextColor: "#111111",
+  autoTranslateAll: false,
 };
 
 function getSettings() {
@@ -38,6 +39,8 @@ async function init() {
   if (bgEl) bgEl.value = bg;
   if (txtEl) txtEl.value = txt;
   if (opEl) opEl.value = String(op);
+  const autoEl = document.getElementById("autoTranslateAll");
+  if (autoEl) autoEl.checked = Boolean(s.autoTranslateAll);
 }
 
 async function save() {
@@ -57,6 +60,7 @@ async function save() {
         DEFAULTS.overlayBgOpacity,
       10
     ),
+    autoTranslateAll: document.getElementById("autoTranslateAll").checked,
   };
   await setSettings(payload);
   const status = document.getElementById("status");

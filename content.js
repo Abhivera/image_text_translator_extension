@@ -2,8 +2,12 @@
   const BUTTON_CLASS = "manga-translator-btn";
   const OVERLAY_CLASS = "manga-translation-overlay";
   const BADGE_CLASS = "manga-translation-badge";
+  const HUD_ID = "manga-translation-hud";
 
-  let isActive = false;
+  let isTabEnabled = false;
+  let isBulkTranslating = false;
+  let bulkAbort = false;
+  let isCurrentTabActive = true;
   let settings = {
     apiKey: "",
     sourceLanguage: "ja",
@@ -11,10 +15,34 @@
     overlayBgColor: "#ffffff",
     overlayBgOpacity: 95,
     overlayTextColor: "#111111",
+    autoTranslateAll: false,
+    enableByDefault: false,
   };
+
+  const urlToResultCache = new Map();
 
   function log(...args) {
     // console.log("[MangaTranslator]", ...args);
+  }
+
+  function notifyActiveChanged() {
+    try {
+      chrome.runtime.sendMessage({
+        type: "SET_TAB_ENABLED",
+        enabled: isTabEnabled,
+      });
+    } catch {}
+  }
+
+  function requestTabEnabled() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "GET_TAB_ENABLED" }, (resp) => {
+        if (resp && resp.ok) {
+          isTabEnabled = resp.enabled;
+        }
+        resolve(isTabEnabled);
+      });
+    });
   }
 
   function requestSettings() {
@@ -36,17 +64,25 @@
       .${BUTTON_CLASS} {
         position: absolute;
         z-index: 2147483646;
-        background: linear-gradient(135deg,#667eea,#764ba2);
-        color: #fff;
+        background: transparent;
+        color: inherit;
         border: none;
-        border-radius: 999px;
-        padding: 6px 10px;
+        border-radius: 0;
+        padding: 0;
         font-size: 12px;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        box-shadow: none;
         transform: translate(0, -110%);
       }
       .${BUTTON_CLASS}:hover { opacity: 0.95; }
+      .${BUTTON_CLASS} .mt-icon {
+        width: 64px;
+        height: 64px;
+        display: block;
+      }
+      .${BUTTON_CLASS} .mt-icon.mt-rotating {
+        animation: mt-spin 0.8s linear infinite;
+      }
       .${OVERLAY_CLASS} {
         position: absolute;
         z-index: 2147483645;
@@ -72,6 +108,42 @@
         font-size: 12px;
         box-shadow: 0 6px 14px rgba(0,0,0,0.25);
       }
+      #${HUD_ID} {
+        position: fixed;
+        right: 14px;
+        bottom: 56px;
+        z-index: 2147483647;
+        background: rgba(17,17,17,0.92);
+        color: #fff;
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 200px;
+      }
+      #${HUD_ID} .mt-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: mt-spin 0.8s linear infinite;
+      }
+      @keyframes mt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      #${HUD_ID} .mt-cancel {
+        margin-left: auto;
+        background: transparent;
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 999px;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      #${HUD_ID} .mt-cancel:hover { background: rgba(255,255,255,0.1); }
     `;
     document.documentElement.appendChild(style);
   }
@@ -79,19 +151,48 @@
   function createBadge() {
     const badge = document.createElement("div");
     badge.className = BADGE_CLASS;
-    badge.textContent = "Manga Translator: On";
+    badge.textContent = isTabEnabled ? "Translator: On" : "Translator: Off";
     badge.title = "Click to toggle";
     badge.style.cursor = "pointer";
     badge.addEventListener("click", () => {
-      isActive = !isActive;
-      badge.textContent = isActive
-        ? "Manga Translator: On"
-        : "Manga Translator: Off";
-      if (isActive) scanAllImages();
-      else cleanupAll();
+      isTabEnabled = !isTabEnabled;
+      notifyActiveChanged();
+      badge.textContent = isTabEnabled ? "Translator: On" : "Translator: Off";
+      if (isActive) {
+        scanAllImages();
+        if (settings.autoTranslateAll) translateAllImages();
+      } else cleanupAll();
     });
     document.documentElement.appendChild(badge);
     return badge;
+  }
+
+  function getOrCreateHud() {
+    let hud = document.getElementById(HUD_ID);
+    if (hud) return hud;
+    hud = document.createElement("div");
+    hud.id = HUD_ID;
+    hud.innerHTML = `
+      <div class="mt-spinner" aria-hidden="true"></div>
+      <div class="mt-text">Preparing…</div>
+      <button class="mt-cancel" type="button">Cancel</button>
+    `;
+    hud.querySelector(".mt-cancel").addEventListener("click", () => {
+      bulkAbort = true;
+    });
+    document.documentElement.appendChild(hud);
+    return hud;
+  }
+
+  function updateHud(done, total) {
+    const hud = getOrCreateHud();
+    const txt = hud.querySelector(".mt-text");
+    if (txt) txt.textContent = `Translating images… ${done}/${total}`;
+  }
+
+  function hideHud() {
+    const hud = document.getElementById(HUD_ID);
+    if (hud) hud.remove();
   }
 
   function addTranslateButton(img) {
@@ -101,7 +202,13 @@
     const rect = img.getBoundingClientRect();
     const button = document.createElement("button");
     button.className = BUTTON_CLASS;
-    button.textContent = "Translate";
+    button.setAttribute("aria-label", "Translate");
+    button.title = "Translate";
+    const icon = document.createElement("img");
+    icon.className = "mt-icon";
+    icon.src = chrome.runtime.getURL("icons/translate_icon_32.svg");
+    icon.alt = "Translate";
+    button.appendChild(icon);
     button.style.left = `${Math.max(0, rect.left + window.scrollX + 10)}px`;
     button.style.top = `${Math.max(0, rect.top + window.scrollY + 10)}px`;
 
@@ -117,7 +224,7 @@
     button.addEventListener("click", async (e) => {
       e.stopPropagation();
       button.disabled = true;
-      button.textContent = "Translating...";
+      icon.classList.add("mt-rotating");
       try {
         const rect = img.getBoundingClientRect();
         const elementRect = {
@@ -132,6 +239,7 @@
           window.devicePixelRatio || 1
         );
         overlayTranslations(img, resp);
+        img.dataset.mangaTranslatorTranslated = "1";
       } catch (err) {
         console.warn("translate error", err);
         alert(
@@ -139,7 +247,7 @@
         );
       } finally {
         button.disabled = false;
-        button.textContent = "Translate";
+        icon.classList.remove("mt-rotating");
       }
     });
 
@@ -240,12 +348,15 @@
     }
   }
 
-  function scanAllImages() {
-    if (!isActive) return;
-    const images = Array.from(document.images).filter(
+  function eligibleImages() {
+    return Array.from(document.images).filter(
       (img) => img.width >= 120 && img.height >= 120
     );
-    images.forEach(addTranslateButton);
+  }
+
+  function scanAllImages() {
+    if (!isTabEnabled || !isCurrentTabActive) return;
+    eligibleImages().forEach(addTranslateButton);
   }
 
   function cleanupAll() {
@@ -253,7 +364,82 @@
     document.querySelectorAll(`.${OVERLAY_CLASS}`).forEach((el) => el.remove());
     Array.from(document.images).forEach((img) => {
       delete img.dataset.mangaTranslatorHasButton;
+      delete img.dataset.mangaTranslatorTranslated;
     });
+    hideHud();
+    isBulkTranslating = false;
+    bulkAbort = false;
+  }
+
+  async function translateAllImages() {
+    if (!isTabEnabled || !isCurrentTabActive) return;
+    if (isBulkTranslating) return;
+    isBulkTranslating = true;
+    bulkAbort = false;
+
+    const list = eligibleImages();
+    const targets = list.filter(
+      (img) => img.dataset.mangaTranslatorTranslated !== "1"
+    );
+    if (targets.length === 0) {
+      isBulkTranslating = false;
+      bulkAbort = false;
+      try {
+        alert("No translatable images found on this page.");
+      } catch {}
+      return;
+    }
+
+    getOrCreateHud();
+    updateHud(0, targets.length);
+
+    // Small worker pool for concurrency
+    const CONCURRENCY = 3;
+    let done = 0;
+    let idx = 0;
+
+    const runWorker = async () => {
+      while (!bulkAbort) {
+        const i = idx++;
+        if (i >= targets.length) break;
+        const img = targets[i];
+        try {
+          let result;
+          const cached = urlToResultCache.get(img.src);
+          if (cached) {
+            result = cached;
+          } else {
+            const rect = img.getBoundingClientRect();
+            const elementRect = {
+              left: rect.left + window.scrollX,
+              top: rect.top + window.scrollY,
+              width: rect.width,
+              height: rect.height,
+            };
+            result = await translateImage(
+              img.src,
+              elementRect,
+              window.devicePixelRatio || 1
+            );
+            urlToResultCache.set(img.src, result);
+          }
+          overlayTranslations(img, result);
+          img.dataset.mangaTranslatorTranslated = "1";
+        } catch (err) {
+          console.warn("translate-all error", err);
+        } finally {
+          done += 1;
+          updateHud(done, targets.length);
+        }
+      }
+    };
+
+    const workers = Array.from({ length: CONCURRENCY }, () => runWorker());
+    await Promise.all(workers);
+
+    hideHud();
+    isBulkTranslating = false;
+    bulkAbort = false;
   }
 
   function translateImage(url, elementRect, pageScale) {
@@ -284,23 +470,52 @@
   function addGlobalKeyboardShortcut() {
     window.addEventListener("keydown", (e) => {
       if (e.altKey && e.key.toLowerCase() === "t") {
-        isActive = !isActive;
-        if (isActive) scanAllImages();
-        else cleanupAll();
+        isTabEnabled = !isTabEnabled;
+        notifyActiveChanged();
+        const badge = document.querySelector(`.${BADGE_CLASS}`);
+        if (badge) {
+          badge.textContent = isTabEnabled
+            ? "Translator: On"
+            : "Translator: Off";
+        }
+        if (isTabEnabled && isCurrentTabActive) {
+          scanAllImages();
+          if (settings.autoTranslateAll) translateAllImages();
+        } else cleanupAll();
       }
     });
+  }
+
+  function handleTabVisibilityChange() {
+    isCurrentTabActive = !document.hidden;
+    if (!isCurrentTabActive) {
+      // Clean up when tab becomes inactive
+      cleanupAll();
+    } else if (isTabEnabled) {
+      // Re-scan when tab becomes active again
+      scanAllImages();
+      if (settings.autoTranslateAll) translateAllImages();
+    }
   }
 
   async function init() {
     ensureStyles();
     await requestSettings();
+    await requestTabEnabled();
     addGlobalKeyboardShortcut();
-    createBadge();
-    isActive = true;
-    scanAllImages();
+
+    // Listen for tab visibility changes
+    document.addEventListener("visibilitychange", handleTabVisibilityChange);
+
+    notifyActiveChanged();
+    if (isTabEnabled && isCurrentTabActive) {
+      scanAllImages();
+      if (settings.autoTranslateAll) translateAllImages();
+    }
 
     const observer = new MutationObserver(() => {
       scanAllImages();
+      if (settings.autoTranslateAll) translateAllImages();
     });
     observer.observe(document.documentElement, {
       childList: true,
@@ -317,6 +532,8 @@
           "overlayBgColor",
           "overlayBgOpacity",
           "overlayTextColor",
+          "autoTranslateAll",
+          "enableByDefault",
         ];
         let needsRestyle = false;
         for (const k of keys) {
@@ -364,6 +581,39 @@
         (i) => i.src === message.payload.url
       );
       if (img) overlayTranslations(img, message.payload.result);
+    }
+    if (message.type === "MT_TRANSLATE_ALL_NOW") {
+      translateAllImages();
+    }
+  });
+
+  // Per-tab activation handlers for popup
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || !message.type) return;
+    if (message.type === "MT_GET_ACTIVE") {
+      sendResponse({ ok: true, active: isTabEnabled });
+      return;
+    }
+    if (message.type === "MT_SET_ACTIVE") {
+      const desired = Boolean(message.active);
+      if (desired !== isTabEnabled) {
+        isTabEnabled = desired;
+        notifyActiveChanged();
+        const badge = document.querySelector(`.${BADGE_CLASS}`);
+        if (badge) {
+          badge.textContent = isTabEnabled
+            ? "Translator: On"
+            : "Translator: Off";
+        }
+        if (isTabEnabled && isCurrentTabActive) {
+          scanAllImages();
+          if (settings.autoTranslateAll) translateAllImages();
+        } else {
+          cleanupAll();
+        }
+      }
+      sendResponse({ ok: true, active: isTabEnabled });
+      return;
     }
   });
 

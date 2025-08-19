@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manga Translator Options</title>
+    <title> Translator</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
@@ -53,11 +53,20 @@
         color: #0a7a0a;
         font-weight: 600;
       }
+      .switch {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .switch input[type="checkbox"] {
+        width: auto;
+      }
     </style>
   </head>
   <body>
     <div class="card">
-      <h2>Manga Image Translator — Options</h2>
+      <h2>Image Text Translator — Options</h2>
       <p class="hint">Store your Gemini API key and default languages.</p>
 
       <label for="apiKey">Gemini API Key</label>
@@ -116,6 +125,13 @@
       <p class="hint">
         Higher opacity makes the translation background more solid.
       </p>
+
+      <div class="switch">
+        <input id="autoTranslateAll" type="checkbox" />
+        <label for="autoTranslateAll" style="margin: 0"
+          >Automatically translate all images on the page</label
+        >
+      </div>
 
       <button id="save" class="btn">Save</button>
       <span id="status" class="ok" style="margin-left: 8px"></span>
