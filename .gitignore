@@ -1,0 +1,85 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# IDE/editor directories
+.vscode/
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node / package managers
+node_modules/
+.npm/
+.npmrc
+.yarn/
+.pnp/
+.pnp.js
+.pnp.cjs
+.eslintcache
+
+# Caches / coverage
+.cache/
+coverage/
+.parcel-cache/
+.vite/
+
+# Build outputs
+build/
+dist/
+out/
+.tmp/
+temp/
+
+# Environment files
+.env
+.env.*.local
+
+# Web extension artifacts
+web-ext-artifacts/
+*.xpi
+*.crx
+*.pem
+
+# Misc
+*.local
+*.orig
+
+# Browser extension (dev/build) outputs
+.web-extension-id
+.web-ext-cache/
+*.zip
+
+# TypeScript
+*.tsbuildinfo
+
+# Test/coverage
+.nyc_output/
+
+# Bundler caches
+.rollup.cache/
+
+# Keys/certs generated for signing (do not commit private keys)
+*.p12
+*.pfx
+*.cer
+*.crt
+*.key
+
+# Local environment overrides
+.env.local

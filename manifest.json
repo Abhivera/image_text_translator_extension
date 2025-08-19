@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Manga Image Translator (Gemini)",
+  "version": "0.1.0",
+  "description": "Translate text on images (e.g., manga) directly on webpages using Google's Gemini API.",
+  "action": {
+    "default_title": "Manga Translator",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "activeTab", "tabs", "scripting", "contextMenus"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
