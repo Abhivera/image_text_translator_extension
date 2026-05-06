@@ -12,6 +12,7 @@ const DEFAULTS = {
   overlayBgColor: "#ffffff",
   overlayBgOpacity: 95,
   overlayTextColor: "#111111",
+  compactOverlayMode: false,
   autoTranslateAll: false,
 };
 
@@ -55,6 +56,8 @@ async function init() {
   if (opEl) opEl.value = String(op);
   const autoEl = document.getElementById("autoTranslateAll");
   if (autoEl) autoEl.checked = Boolean(s.autoTranslateAll);
+  const compactEl = document.getElementById("compactOverlayMode");
+  if (compactEl) compactEl.checked = Boolean(s.compactOverlayMode);
   updateProviderSections(document.getElementById("modelProvider").value, savedModel);
 }
 
@@ -119,6 +122,7 @@ async function save() {
         DEFAULTS.overlayBgOpacity,
       10
     ),
+    compactOverlayMode: document.getElementById("compactOverlayMode").checked,
     autoTranslateAll: document.getElementById("autoTranslateAll").checked,
   };
   await setSettings(payload);

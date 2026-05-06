@@ -12,6 +12,7 @@ const DEFAULTS = {
   overlayBgColor: "#ffffff",
   overlayBgOpacity: 95,
   overlayTextColor: "#111111",
+  compactOverlayMode: false,
   autoTranslateAll: false,
   enableByDefault: false,
 };
@@ -71,6 +72,7 @@ async function init() {
   const textInput = document.getElementById("overlayTextColor");
   const opacityInput = document.getElementById("overlayBgOpacity");
   const opacityValue = document.getElementById("opacityValue");
+  const compactOverlayModeInput = document.getElementById("compactOverlayMode");
   const saveBtn = document.getElementById("saveSettings");
   const saveStatus = document.getElementById("saveStatus");
 
@@ -196,6 +198,11 @@ toggleBtn.addEventListener("click", async () => {
   if (opacityValue && opacityInput) {
     opacityValue.textContent = `${opacityInput.value}%`;
   }
+  if (compactOverlayModeInput) {
+    compactOverlayModeInput.checked = Boolean(
+      currentSettings.compactOverlayMode
+    );
+  }
   
   // Add event listener for model provider changes
   if (modelProviderSelect) {
@@ -222,6 +229,7 @@ toggleBtn.addEventListener("click", async () => {
         overlayBgColor: bgInput?.value || "#ffffff",
         overlayTextColor: textInput?.value || "#111111",
         overlayBgOpacity: parseInt(opacityInput?.value || "95", 10),
+        compactOverlayMode: Boolean(compactOverlayModeInput?.checked),
       };
       await new Promise((resolve) =>
         chrome.storage.local.set(payload, resolve)

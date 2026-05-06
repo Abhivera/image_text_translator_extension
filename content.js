@@ -22,6 +22,7 @@
     overlayBgColor: "#ffffff",
     overlayBgOpacity: 95,
     overlayTextColor: "#111111",
+    compactOverlayMode: false,
     autoTranslateAll: false,
     enableByDefault: false,
   };
@@ -93,15 +94,47 @@
       .${OVERLAY_CLASS} {
         position: absolute;
         z-index: 2147483645;
-        background: rgba(255,255,255,0.95);
+        background: rgba(255,255,255,0.92);
         color: #111;
-        padding: 4px 6px;
-        border-radius: 6px;
-        border: 1px solid rgba(0,0,0,0.1);
-        font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        max-width: 50%;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(15, 23, 42, 0.18);
+        font: 650 13px/1.35 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        letter-spacing: 0.01em;
+        max-width: 60%;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.22);
+        backdrop-filter: blur(1.5px);
+        -webkit-backdrop-filter: blur(1.5px);
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
         pointer-events: none;
+        opacity: 0;
+        transform: translateY(3px) scale(0.985);
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+      .${OVERLAY_CLASS}.mt-visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      .${OVERLAY_CLASS}.mt-compact {
+        padding: 4px 6px;
+        border-radius: 7px;
+        font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        max-width: 48%;
+      }
+      .${OVERLAY_CLASS}.mt-overlay-fallback {
+        left: 0;
+        right: 0;
+        margin-left: auto;
+        margin-right: auto;
+        max-width: min(92vw, 560px);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .${OVERLAY_CLASS} {
+          transition: none;
+          transform: none;
+        }
       }
       .${BADGE_CLASS} {
         position: fixed;
@@ -284,32 +317,95 @@
       (result && result.result && result.result.texts) ||
       (result && result.texts) ||
       [];
+    const imagePadding = 6;
     let fallbackRow = 0;
+    const placedRects = [];
+
+    function intersects(a, b) {
+      return (
+        a.left < b.right &&
+        a.right > b.left &&
+        a.top < b.bottom &&
+        a.bottom > b.top
+      );
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function resolveCollision(initialLeft, initialTop, boxWidth, boxHeight) {
+      const minLeft = pageX + imagePadding;
+      const maxLeft = pageX + Math.max(imagePadding, rect.width - imagePadding - boxWidth);
+      const minTop = pageY + imagePadding;
+      const maxTop = pageY + Math.max(imagePadding, rect.height - imagePadding - boxHeight);
+
+      let left = clamp(initialLeft, minLeft, maxLeft);
+      let top = clamp(initialTop, minTop, maxTop);
+      let candidate = { left, top, right: left + boxWidth, bottom: top + boxHeight };
+
+      if (!placedRects.some((r) => intersects(r, candidate))) return candidate;
+
+      const yStep = settings.compactOverlayMode ? 14 : 20;
+      const xStep = settings.compactOverlayMode ? 12 : 18;
+      for (let pass = 0; pass < 2; pass++) {
+        for (let attempt = 0; attempt < 28; attempt++) {
+          if (pass === 0) {
+            top = clamp(top + yStep, minTop, maxTop);
+          } else {
+            left = clamp(left + xStep, minLeft, maxLeft);
+            top = clamp(initialTop + (attempt % 8) * yStep, minTop, maxTop);
+          }
+          candidate = { left, top, right: left + boxWidth, bottom: top + boxHeight };
+          if (!placedRects.some((r) => intersects(r, candidate))) return candidate;
+        }
+      }
+      return candidate;
+    }
+
     for (const t of texts) {
       if (!t.translation) continue;
       const div = document.createElement("div");
       div.className = OVERLAY_CLASS;
       div.dataset.for = img.src;
+      if (settings.compactOverlayMode) div.classList.add("mt-compact");
 
       div.textContent = t.translation;
       applyOverlayColorStyles(div);
       const hasXY = Number.isFinite(Number(t.x)) && Number.isFinite(Number(t.y));
       const widthPct = Number(t.width);
-      const left = hasXY
+      const preferredLeft = hasXY
         ? pageX + (Number(t.x) / 100) * rect.width
-        : pageX + 8;
-      const top = hasXY
+        : pageX + imagePadding;
+      const preferredTop = hasXY
         ? pageY + (Number(t.y) / 100) * rect.height
-        : pageY + 8 + fallbackRow * 22;
+        : pageY + imagePadding + fallbackRow * 30;
       const width = Number.isFinite(widthPct) ? (widthPct / 100) * rect.width : 0;
       // height is not used directly; overlays autosize by content
 
-      div.style.left = `${left}px`;
-      div.style.top = `${top}px`;
-      if (width > 0) div.style.maxWidth = `${Math.max(80, width)}px`;
-      if (!hasXY) fallbackRow += 1;
+      const maxWidthPx = width > 0 ? Math.max(100, width) : Math.max(160, rect.width * 0.6);
+      div.style.maxWidth = `${Math.min(rect.width - imagePadding * 2, maxWidthPx)}px`;
 
+      // Measure then position with collision-avoidance.
+      div.style.visibility = "hidden";
       document.documentElement.appendChild(div);
+      const measured = div.getBoundingClientRect();
+      const positioned = resolveCollision(
+        preferredLeft,
+        preferredTop,
+        Math.max(40, measured.width),
+        Math.max(20, measured.height)
+      );
+      div.style.left = `${positioned.left}px`;
+      div.style.top = `${positioned.top}px`;
+      placedRects.push(positioned);
+
+      if (!hasXY) {
+        div.classList.add("mt-overlay-fallback");
+        fallbackRow += 1;
+      }
+      div.style.visibility = "visible";
+      requestAnimationFrame(() => div.classList.add("mt-visible"));
     }
   }
 
@@ -557,6 +653,7 @@
           "overlayBgColor",
           "overlayBgOpacity",
           "overlayTextColor",
+          "compactOverlayMode",
           "autoTranslateAll",
           "enableByDefault",
         ];

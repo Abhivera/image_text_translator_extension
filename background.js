@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   overlayBgColor: "#ffffff",
   overlayBgOpacity: 95,
   overlayTextColor: "#111111",
+  compactOverlayMode: false,
   autoTranslateAll: false,
   enableByDefault: false,
 };
