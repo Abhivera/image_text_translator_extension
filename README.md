@@ -4,11 +4,11 @@
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-blue.svg)](https://developer.chrome.com/docs/extensions/)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-A powerful browser extension that translates text on images (manga, comics, screenshots, etc.) directly on webpages using multiple AI models. Features real-time translation overlays with support for **Google Gemini**, **OpenAI ChatGPT**, and **DeepSeek** models.
+A powerful browser extension that translates text on images (manga, comics, screenshots, etc.) directly on webpages using multiple AI models. Features real-time translation overlays with support for **Google Gemini**, **OpenAI ChatGPT**, **DeepSeek**, **Groq**, and **Ollama (local)** models.
 
 ## ✨ Features
 
-- **🤖 Multi-Model Support**: Choose between Gemini, ChatGPT, and DeepSeek AI models
+- **🤖 Multi-Model Support**: Choose between Gemini, ChatGPT, DeepSeek, Groq, and Ollama AI models
 - **🎯 One-Click Translation**: Floating translate buttons appear on images automatically
 - **⌨️ Keyboard Shortcuts**: Alt+T to toggle translation mode on/off
 - **🖱️ Context Menu**: Right-click any image to translate instantly
@@ -39,6 +39,8 @@ Select one of the supported AI models and get an API key:
 | **Google Gemini** | 1.5 Flash, 1.5 Pro | [Google AI Studio](https://makersuite.google.com/app/apikey) |
 | **OpenAI ChatGPT** | GPT-4o, GPT-4o Mini, GPT-4 Turbo | [OpenAI Platform](https://platform.openai.com/api-keys) |
 | **DeepSeek** | Chat, Coder | [DeepSeek Platform](https://platform.deepseek.com/api_keys) |
+| **Groq** | Llama vision models | [Groq Console](https://console.groq.com/keys) |
+| **Ollama** | llava, llama3.2-vision | Local endpoint (default `http://localhost:11434`) |
 
 ### 2. Configure the Extension
 
@@ -75,7 +77,7 @@ Select one of the supported AI models and get an API key:
 ## ⚙️ Configuration Options
 
 ### AI Model Settings
-- **Model Provider**: Choose between Gemini, OpenAI, or DeepSeek
+- **Model Provider**: Choose between Gemini, OpenAI, DeepSeek, Groq, or Ollama
 - **API Keys**: Separate secure storage for each provider
 - **Specific Models**: Fine-tune model selection per provider
 
@@ -100,6 +102,8 @@ Select one of the supported AI models and get an API key:
 - **Gemini**: Uses Google's Generative Language API
 - **OpenAI**: Leverages Chat Completions API with vision capabilities
 - **DeepSeek**: Integrates with DeepSeek's vision-enabled chat API
+- **Groq**: Uses Groq's OpenAI-compatible chat completions endpoint
+- **Ollama**: Sends image + prompt to local Ollama server (`/api/chat`)
 - **Unified Interface**: Consistent experience regardless of chosen provider
 
 ## Permissions

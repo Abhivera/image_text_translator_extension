@@ -13,6 +13,9 @@
     geminiApiKey: "",
     openaiApiKey: "",
     deepseekApiKey: "",
+    groqApiKey: "",
+    ollamaApiKey: "",
+    ollamaBaseUrl: "http://localhost:11434",
     model: "gemini-1.5-flash",
     sourceLanguage: "ja",
     targetLanguage: "en",
@@ -281,6 +284,7 @@
       (result && result.result && result.result.texts) ||
       (result && result.texts) ||
       [];
+    let fallbackRow = 0;
     for (const t of texts) {
       if (!t.translation) continue;
       const div = document.createElement("div");
@@ -289,14 +293,21 @@
 
       div.textContent = t.translation;
       applyOverlayColorStyles(div);
-      const left = pageX + (Number(t.x) / 100) * rect.width;
-      const top = pageY + (Number(t.y) / 100) * rect.height;
-      const width = (Number(t.width) / 100) * rect.width;
+      const hasXY = Number.isFinite(Number(t.x)) && Number.isFinite(Number(t.y));
+      const widthPct = Number(t.width);
+      const left = hasXY
+        ? pageX + (Number(t.x) / 100) * rect.width
+        : pageX + 8;
+      const top = hasXY
+        ? pageY + (Number(t.y) / 100) * rect.height
+        : pageY + 8 + fallbackRow * 22;
+      const width = Number.isFinite(widthPct) ? (widthPct / 100) * rect.width : 0;
       // height is not used directly; overlays autosize by content
 
       div.style.left = `${left}px`;
       div.style.top = `${top}px`;
       if (width > 0) div.style.maxWidth = `${Math.max(80, width)}px`;
+      if (!hasXY) fallbackRow += 1;
 
       document.documentElement.appendChild(div);
     }
@@ -534,6 +545,9 @@
           "geminiApiKey",
           "openaiApiKey",
           "deepseekApiKey",
+          "groqApiKey",
+          "ollamaApiKey",
+          "ollamaBaseUrl",
           "model",
           "sourceLanguage",
           "targetLanguage",

@@ -8,6 +8,9 @@ const DEFAULT_SETTINGS = {
   geminiApiKey: "",
   openaiApiKey: "",
   deepseekApiKey: "",
+  groqApiKey: "",
+  ollamaApiKey: "",
+  ollamaBaseUrl: "http://localhost:11434",
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
@@ -107,7 +110,8 @@ function buildPrompt(sourceLanguage, targetLanguage) {
     `- Return tight bounding boxes around each text block.\n` +
     `Return STRICT JSON only in this schema (no markdown fences, no extra text):\n` +
     `{"texts":[{"source":"string","translation":"string","x":0,"y":0,"width":0,"height":0}]}` +
-    `\nCoordinates are percentages (0-100) of the image from the top-left. Use multiple entries for separate bubbles/lines.`
+    `\nCoordinates are percentages (0-100) of the image from the top-left. Use multiple entries for separate bubbles/lines.` +
+    `\nIf precise boxes are unknown, still return texts with best-guess x/y/width/height values.`
   );
 }
 
@@ -219,35 +223,217 @@ async function callDeepSeek({
   return parseVisionResponse(content);
 }
 
-function parseVisionResponse(content) {
-  // Try to parse as strict JSON; if the model returned extra text, extract the first JSON object
-  let jsonText = content.trim();
-  const match = jsonText.match(/\{[\s\S]*\}/);
-  if (match) jsonText = match[0];
+async function callGroq({
+  apiKey,
+  model,
+  base64,
+  mime,
+  sourceLanguage,
+  targetLanguage,
+}) {
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+  const prompt = buildPrompt(sourceLanguage, targetLanguage);
 
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    // Fallback to a minimal schema if parsing fails
-    parsed = { texts: [] };
+  const body = {
+    model: model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${mime};base64,${base64}`,
+              detail: "high",
+            },
+          },
+        ],
+      },
+    ],
+    max_tokens: 1024,
+    temperature: 0.1,
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Groq request failed: ${response.status} ${response.statusText} ${text}`
+    );
   }
 
-  if (!parsed || !Array.isArray(parsed.texts)) {
-    parsed = { texts: [] };
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content || "";
+
+  return parseVisionResponse(content);
+}
+
+function normalizeOllamaBaseUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "http://localhost:11434";
+  return raw.replace(/\/+$/, "");
+}
+
+async function callOllama({
+  model,
+  base64,
+  sourceLanguage,
+  targetLanguage,
+  baseUrl,
+  apiKey,
+}) {
+  const url = `${normalizeOllamaBaseUrl(baseUrl)}/api/chat`;
+  const prompt = buildPrompt(sourceLanguage, targetLanguage);
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const body = {
+    model: model,
+    stream: false,
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+        images: [base64],
+      },
+    ],
+    options: {
+      temperature: 0.1,
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Ollama request failed: ${response.status} ${response.statusText} ${text}`
+    );
   }
 
-  // Normalize items and clamp values
-  parsed.texts = parsed.texts.map((t) => ({
-    source: String(t.source || t.japanese || t.original || ""),
-    translation: String(t.translation || t.english || t.translated || ""),
-    x: Math.max(0, Math.min(100, Number(t.x ?? 0))),
-    y: Math.max(0, Math.min(100, Number(t.y ?? 0))),
-    width: Math.max(0, Math.min(100, Number(t.width ?? 20))),
-    height: Math.max(0, Math.min(100, Number(t.height ?? 10))),
+  const data = await response.json();
+  const content = data?.message?.content || "";
+  return parseVisionResponse(content);
+}
+
+function extractFirstJsonObject(text) {
+  const src = String(text || "");
+  const start = src.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < src.length; i++) {
+    const ch = src[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function parseTextLinesFallback(content) {
+  const lines = String(content || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const candidates = [];
+  for (const line of lines) {
+    if (line.length < 2) continue;
+    const cleaned = line
+      .replace(/^[-*•\d\).\s]+/, "")
+      .replace(/^"(.*)"$/, "$1")
+      .trim();
+    if (cleaned.length >= 2) candidates.push(cleaned);
+  }
+  const unique = [...new Set(candidates)].slice(0, 20);
+  return unique.map((translation, i) => ({
+    source: "",
+    translation,
+    x: 3,
+    y: Math.min(92, 4 + i * 8),
+    width: 94,
+    height: 8,
   }));
+}
 
-  return parsed;
+function parseVisionResponse(content) {
+  const raw = String(content || "").trim();
+  let parsed = null;
+
+  // Attempt strict parse first
+  try {
+    parsed = JSON.parse(raw);
+  } catch {}
+
+  // Then try extracting the first balanced JSON object from mixed text
+  if (!parsed) {
+    const firstObj = extractFirstJsonObject(raw);
+    if (firstObj) {
+      try {
+        parsed = JSON.parse(firstObj);
+      } catch {}
+    }
+  }
+
+  // Accept both {texts:[...]} and direct array responses
+  if (Array.isArray(parsed)) parsed = { texts: parsed };
+  if (!parsed || !Array.isArray(parsed.texts)) parsed = { texts: [] };
+
+  const normalized = parsed.texts
+    .map((t) => ({
+      source: String(t?.source || t?.japanese || t?.original || t?.text || ""),
+      translation: String(t?.translation || t?.english || t?.translated || ""),
+      x: Math.max(0, Math.min(100, Number(t?.x ?? t?.left ?? 0))),
+      y: Math.max(0, Math.min(100, Number(t?.y ?? t?.top ?? 0))),
+      width: Math.max(0, Math.min(100, Number(t?.width ?? t?.w ?? 0))),
+      height: Math.max(0, Math.min(100, Number(t?.height ?? t?.h ?? 0))),
+    }))
+    .filter((t) => t.translation.length > 0);
+
+  if (normalized.length > 0) {
+    return {
+      texts: normalized.map((t, i) => ({
+        ...t,
+        width: t.width > 0 ? t.width : 90,
+        height: t.height > 0 ? t.height : 8,
+        y: Number.isFinite(t.y) ? t.y : Math.min(92, 4 + i * 8),
+      })),
+    };
+  }
+
+  // Last resort: convert plain text output into visible overlays
+  const fallbackTexts = parseTextLinesFallback(raw);
+  return { texts: fallbackTexts };
 }
 
 async function callGeminiVision({
@@ -308,7 +494,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
   const { modelProvider } = settings;
   const apiKey = settings[`${modelProvider}ApiKey`];
   
-  if (!apiKey) {
+  if (modelProvider !== "ollama" && !apiKey) {
     throw new Error(`Missing ${modelProvider.toUpperCase()} API key. Set it in the Settings.`);
   }
 
@@ -339,6 +525,24 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
         mime,
         sourceLanguage,
         targetLanguage,
+      });
+    case "groq":
+      return await callGroq({
+        apiKey,
+        model: settings.model || "meta-llama/llama-4-scout-17b-16e-instruct",
+        base64,
+        mime,
+        sourceLanguage,
+        targetLanguage,
+      });
+    case "ollama":
+      return await callOllama({
+        apiKey,
+        model: settings.model || "llava:latest",
+        base64,
+        sourceLanguage,
+        targetLanguage,
+        baseUrl: settings.ollamaBaseUrl || DEFAULT_SETTINGS.ollamaBaseUrl,
       });
     default:
       throw new Error(`Unsupported model provider: ${modelProvider}`);
@@ -401,7 +605,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const { modelProvider } = settings;
         const apiKey = settings[`${modelProvider}ApiKey`];
         
-        if (!apiKey) {
+        if (modelProvider !== "ollama" && !apiKey) {
           throw new Error(`Missing ${modelProvider.toUpperCase()} API key. Set it in the Settings.`);
         }
 
@@ -473,7 +677,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       const { modelProvider } = settings;
       const apiKey = settings[`${modelProvider}ApiKey`];
       
-      if (!apiKey) {
+      if (modelProvider !== "ollama" && !apiKey) {
         await chrome.tabs.sendMessage(tab.id, {
           type: "MT_NOTIFY",
           payload: { message: `Set ${modelProvider.toUpperCase()} API key in Settings` },

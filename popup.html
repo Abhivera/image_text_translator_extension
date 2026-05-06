@@ -278,6 +278,8 @@
           <option value="gemini">Google Gemini</option>
           <option value="openai">OpenAI ChatGPT</option>
           <option value="deepseek">DeepSeek</option>
+          <option value="groq">Groq</option>
+          <option value="ollama">Ollama (Local)</option>
         </select>
 
         <!-- Gemini API Key -->
@@ -328,6 +330,33 @@
           </div>
         </div>
 
+        <!-- Groq API Key -->
+        <div id="groqApiSection" style="display: none">
+          <label for="groqApiKey" style="margin-top: 10px">Groq API Key</label>
+          <input id="groqApiKey" type="password" placeholder="gsk_..." />
+          <div class="subtext" style="margin-top: 6px">
+            Get one from
+            <a
+              class="link"
+              href="https://console.groq.com/keys"
+              target="_blank"
+              rel="noreferrer noopener"
+              >Groq Console</a
+            >
+          </div>
+        </div>
+
+        <!-- Ollama Settings -->
+        <div id="ollamaApiSection" style="display: none">
+          <label for="ollamaBaseUrl" style="margin-top: 10px">Ollama Base URL</label>
+          <input id="ollamaBaseUrl" type="text" placeholder="http://localhost:11434" />
+          <div class="subtext" style="margin-top: 6px">
+            Keep Ollama running locally. Optional API key if your endpoint requires auth.
+          </div>
+          <label for="ollamaApiKey" style="margin-top: 10px">Ollama API Key (Optional)</label>
+          <input id="ollamaApiKey" type="password" placeholder="Optional bearer token" />
+        </div>
+
         <div class="row" style="margin-top: 10px">
           <div style="flex: 1">
             <label for="sourceLanguage">Source Language</label>
@@ -362,6 +391,12 @@
           <!-- DeepSeek models -->
           <option value="deepseek-chat" data-provider="deepseek" style="display: none">DeepSeek Chat</option>
           <option value="deepseek-coder" data-provider="deepseek" style="display: none">DeepSeek Coder</option>
+          <!-- Groq models -->
+          <option value="meta-llama/llama-4-scout-17b-16e-instruct" data-provider="groq" style="display: none">Llama 4 Scout 17B</option>
+          <option value="meta-llama/llama-4-maverick-17b-128e-instruct" data-provider="groq" style="display: none">Llama 4 Maverick 17B</option>
+          <!-- Ollama models -->
+          <option value="llava:latest" data-provider="ollama" style="display: none">llava:latest</option>
+          <option value="llama3.2-vision:latest" data-provider="ollama" style="display: none">llama3.2-vision:latest</option>
         </select>
 
         <div class="row" style="margin-top: 10px">

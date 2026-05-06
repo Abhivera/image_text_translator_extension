@@ -3,6 +3,9 @@ const DEFAULTS = {
   geminiApiKey: "",
   openaiApiKey: "",
   deepseekApiKey: "",
+  groqApiKey: "",
+  ollamaApiKey: "",
+  ollamaBaseUrl: "http://localhost:11434",
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
@@ -56,6 +59,9 @@ async function init() {
   const geminiApiKeyInput = document.getElementById("geminiApiKey");
   const openaiApiKeyInput = document.getElementById("openaiApiKey");
   const deepseekApiKeyInput = document.getElementById("deepseekApiKey");
+  const groqApiKeyInput = document.getElementById("groqApiKey");
+  const ollamaApiKeyInput = document.getElementById("ollamaApiKey");
+  const ollamaBaseUrlInput = document.getElementById("ollamaBaseUrl");
   const sourceSelect = document.getElementById("sourceLanguage");
   const targetSelect = document.getElementById("targetLanguage");
   const modelSelect = document.getElementById("model");
@@ -103,11 +109,13 @@ toggleBtn.addEventListener("click", async () => {
   });
 
   // Function to show/hide API key sections based on provider
-  function updateApiKeySections(provider) {
+  function updateApiKeySections(provider, preferredModel) {
     const sections = {
       gemini: document.getElementById("geminiApiSection"),
       openai: document.getElementById("openaiApiSection"),
-      deepseek: document.getElementById("deepseekApiSection")
+      deepseek: document.getElementById("deepseekApiSection"),
+      groq: document.getElementById("groqApiSection"),
+      ollama: document.getElementById("ollamaApiSection"),
     };
     
     Object.keys(sections).forEach(key => {
@@ -129,11 +137,16 @@ toggleBtn.addEventListener("click", async () => {
     const defaultModels = {
       gemini: "gemini-1.5-flash",
       openai: "gpt-4o-mini",
-      deepseek: "deepseek-chat"
+      deepseek: "deepseek-chat",
+      groq: "meta-llama/llama-4-scout-17b-16e-instruct",
+      ollama: "llava:latest",
     };
     
     if (modelSelect && defaultModels[provider]) {
-      modelSelect.value = defaultModels[provider];
+      modelSelect.value =
+        preferredModel && modelSelect.querySelector(`option[value="${preferredModel}"]`)
+          ? preferredModel
+          : defaultModels[provider];
     }
   }
 
@@ -144,12 +157,21 @@ toggleBtn.addEventListener("click", async () => {
   
   if (modelProviderSelect) {
     modelProviderSelect.value = currentSettings.modelProvider || "gemini";
-    updateApiKeySections(currentSettings.modelProvider || "gemini");
+    updateApiKeySections(
+      currentSettings.modelProvider || "gemini",
+      currentSettings.model || "gemini-1.5-flash"
+    );
   }
   
   if (geminiApiKeyInput) geminiApiKeyInput.value = currentSettings.geminiApiKey || "";
   if (openaiApiKeyInput) openaiApiKeyInput.value = currentSettings.openaiApiKey || "";
   if (deepseekApiKeyInput) deepseekApiKeyInput.value = currentSettings.deepseekApiKey || "";
+  if (groqApiKeyInput) groqApiKeyInput.value = currentSettings.groqApiKey || "";
+  if (ollamaApiKeyInput) ollamaApiKeyInput.value = currentSettings.ollamaApiKey || "";
+  if (ollamaBaseUrlInput) {
+    ollamaBaseUrlInput.value =
+      currentSettings.ollamaBaseUrl || "http://localhost:11434";
+  }
   if (sourceSelect) sourceSelect.value = currentSettings.sourceLanguage || "ja";
   if (targetSelect) targetSelect.value = currentSettings.targetLanguage || "en";
   if (modelSelect)
@@ -170,7 +192,7 @@ toggleBtn.addEventListener("click", async () => {
   // Add event listener for model provider changes
   if (modelProviderSelect) {
     modelProviderSelect.addEventListener("change", () => {
-      updateApiKeySections(modelProviderSelect.value);
+      updateApiKeySections(modelProviderSelect.value, "");
     });
   }
 
@@ -182,6 +204,10 @@ toggleBtn.addEventListener("click", async () => {
         geminiApiKey: (geminiApiKeyInput?.value || "").trim(),
         openaiApiKey: (openaiApiKeyInput?.value || "").trim(),
         deepseekApiKey: (deepseekApiKeyInput?.value || "").trim(),
+        groqApiKey: (groqApiKeyInput?.value || "").trim(),
+        ollamaApiKey: (ollamaApiKeyInput?.value || "").trim(),
+        ollamaBaseUrl:
+          (ollamaBaseUrlInput?.value || "http://localhost:11434").trim(),
         sourceLanguage: sourceSelect?.value || "ja",
         targetLanguage: targetSelect?.value || "en",
         model: modelSelect?.value || "gemini-1.5-flash",
