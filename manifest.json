@@ -3,19 +3,9 @@
   "name": "Image Text Translator",
   "version": "2.1.0",
   "description": "Translate text on images (e.g.,manga,manhwa) directly on webpages using LLM",
-  "icons": {
-    "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
   "action": {
     "default_title": "Image Text Translator",
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "32": "icons/icon32.png"
-    }
+    "default_popup": "popup.html"
   },
   "options_ui": {
     "page": "options.html",
@@ -37,10 +27,5 @@
       "run_at": "document_idle"
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": ["icons/*.png", "icons/*.svg"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  "web_accessible_resources": []
 }

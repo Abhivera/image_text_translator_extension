@@ -248,6 +248,15 @@
     icon.className = "mt-icon";
     icon.src = chrome.runtime.getURL("icons/translate_icon_32.svg");
     icon.alt = "Translate";
+    icon.onerror = () => {
+      icon.remove();
+      button.textContent = "Translate";
+      button.style.padding = "6px 10px";
+      button.style.borderRadius = "8px";
+      button.style.background = "rgba(2, 132, 199, 0.9)";
+      button.style.color = "#fff";
+      button.style.font = "600 12px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
+    };
     button.appendChild(icon);
     button.style.left = `${Math.max(0, rect.left + window.scrollX + 10)}px`;
     button.style.top = `${Math.max(0, rect.top + window.scrollY + 10)}px`;
