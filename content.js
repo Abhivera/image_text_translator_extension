@@ -29,11 +29,14 @@
     sourceLanguage: "ja",
     targetLanguage: "en",
     compactOverlayMode: false,
+    replaceTextBlocks: true,
+    autoTranslateThenEdit: true,
     autoTranslateAll: false,
     enableByDefault: false,
   };
 
   const urlToResultCache = new Map();
+  const editedTranslationsByImage = new Map();
 
   function log(...args) {
     // console.log("[MangaTranslator]", ...args);
@@ -135,6 +138,21 @@
         margin-left: auto;
         margin-right: auto;
         max-width: min(92vw, 560px);
+      }
+      .${OVERLAY_CLASS}.mt-replace {
+        border-radius: 6px;
+        padding: 4px 6px;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+      .${OVERLAY_CLASS}.mt-editable {
+        pointer-events: auto;
+        cursor: text;
+        outline: none;
+      }
+      .${OVERLAY_CLASS}.mt-editable:focus {
+        box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.7);
       }
       @media (prefers-reduced-motion: reduce) {
         .${OVERLAY_CLASS} {
@@ -288,7 +306,9 @@
       );
       urlToResultCache.set(img.src, result);
     }
-    overlayTranslations(img, result);
+    overlayTranslations(img, result, {
+      editable: Boolean(settings.autoTranslateThenEdit),
+    });
     img.dataset.mangaTranslatorTranslated = "1";
   }
 
@@ -462,7 +482,48 @@
     img.addEventListener("remove", cleanup, { once: true });
   }
 
-  function overlayTranslations(img, result) {
+  function getEditKey(imgSrc, index) {
+    return `${imgSrc}::${index}`;
+  }
+
+  function applyEditableBehavior(div, img, index, textItem) {
+    if (!div) return;
+    const key = getEditKey(img.src, index);
+    const initialText = String(div.textContent || "").trim();
+    const saved = editedTranslationsByImage.get(key);
+    if (saved) div.textContent = saved;
+    div.classList.add("mt-editable");
+    div.setAttribute("contenteditable", "plaintext-only");
+    div.setAttribute("spellcheck", "true");
+    div.title = "Click to edit translation";
+
+    const save = () => {
+      const next = String(div.textContent || "").trim();
+      if (!next) {
+        div.textContent = editedTranslationsByImage.get(key) || initialText;
+        return;
+      }
+      editedTranslationsByImage.set(key, next);
+      if (textItem && typeof textItem === "object") {
+        textItem.translation = next;
+      }
+    };
+
+    div.addEventListener("blur", save);
+    div.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        div.blur();
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        div.textContent = editedTranslationsByImage.get(key) || initialText;
+        div.blur();
+      }
+    });
+  }
+
+  function overlayTranslations(img, result, options = {}) {
     const rect = img.getBoundingClientRect();
     const pageX = rect.left + window.scrollX;
     const pageY = rect.top + window.scrollY;
@@ -522,17 +583,21 @@
       return candidate;
     }
 
-    for (const t of texts) {
+    for (const [index, t] of texts.entries()) {
       if (!t.translation) continue;
       const div = document.createElement("div");
       div.className = OVERLAY_CLASS;
       div.dataset.for = img.src;
+      div.dataset.index = String(index);
       if (settings.compactOverlayMode) div.classList.add("mt-compact");
 
-      div.textContent = t.translation;
+      const editKey = getEditKey(img.src, index);
+      const editedTranslation = editedTranslationsByImage.get(editKey);
+      div.textContent = editedTranslation || t.translation;
       applyOverlayColorStyles(div, img, t);
       const hasXY = Number.isFinite(Number(t.x)) && Number.isFinite(Number(t.y));
       const widthPct = Number(t.width);
+      const heightPct = Number(t.height);
       const preferredLeft = hasXY
         ? pageX + (Number(t.x) / 100) * rect.width
         : pageX + imagePadding;
@@ -540,24 +605,56 @@
         ? pageY + (Number(t.y) / 100) * rect.height
         : pageY + imagePadding + fallbackRow * 30;
       const width = Number.isFinite(widthPct) ? (widthPct / 100) * rect.width : 0;
-      // height is not used directly; overlays autosize by content
+      const height = Number.isFinite(heightPct) ? (heightPct / 100) * rect.height : 0;
+      const replaceMode =
+        settings.replaceTextBlocks && hasXY && width > 0 && height > 0;
 
       const maxWidthPx = width > 0 ? Math.max(100, width) : Math.max(160, rect.width * 0.6);
-      div.style.maxWidth = `${Math.min(rect.width - imagePadding * 2, maxWidthPx)}px`;
+      if (replaceMode) {
+        div.classList.add("mt-replace");
+        const paddedWidth = Math.max(64, width + 12);
+        const paddedHeight = Math.max(28, height + 10);
+        div.style.maxWidth = `${Math.min(
+          rect.width - imagePadding * 2,
+          paddedWidth
+        )}px`;
+        div.style.width = `${Math.min(rect.width - imagePadding * 2, paddedWidth)}px`;
+        div.style.minHeight = `${paddedHeight}px`;
+        div.style.display = "flex";
+        div.style.alignItems = "center";
+        div.style.justifyContent = "center";
+        div.style.textAlign = "center";
+        applyReplacementStyles(div, img, t);
+      } else {
+        div.style.maxWidth = `${Math.min(rect.width - imagePadding * 2, maxWidthPx)}px`;
+      }
+
+      if (options.editable) {
+        applyEditableBehavior(div, img, index, t);
+      }
 
       // Measure then position with collision-avoidance.
       div.style.visibility = "hidden";
       document.documentElement.appendChild(div);
       const measured = div.getBoundingClientRect();
-      const positioned = resolveCollision(
-        preferredLeft,
-        preferredTop,
-        Math.max(40, measured.width),
-        Math.max(20, measured.height)
-      );
+      const positioned = replaceMode
+        ? {
+            left: clamp(preferredLeft, pageX + imagePadding, pageX + Math.max(imagePadding, rect.width - imagePadding - Math.max(40, measured.width))),
+            top: clamp(preferredTop, pageY + imagePadding, pageY + Math.max(imagePadding, rect.height - imagePadding - Math.max(20, measured.height))),
+            right: 0,
+            bottom: 0,
+          }
+        : resolveCollision(
+            preferredLeft,
+            preferredTop,
+            Math.max(40, measured.width),
+            Math.max(20, measured.height)
+          );
       div.style.left = `${positioned.left}px`;
       div.style.top = `${positioned.top}px`;
-      placedRects.push(positioned);
+      if (!replaceMode) {
+        placedRects.push(positioned);
+      }
 
       if (!hasXY) {
         div.classList.add("mt-overlay-fallback");
@@ -615,6 +712,23 @@
       element.style.color = "#0f172a";
       element.style.borderColor = "rgba(15, 23, 42, 0.24)";
     }
+  }
+
+  function applyReplacementStyles(element, img, textItem) {
+    if (!element) return;
+    const centerX = Number.isFinite(Number(textItem?.x))
+      ? Number(textItem.x) + Number(textItem.width || 0) / 2
+      : 50;
+    const centerY = Number.isFinite(Number(textItem?.y))
+      ? Number(textItem.y) + Number(textItem.height || 0) / 2
+      : 50;
+    const luminance = estimateImageLuminance(img, centerX, centerY);
+    const useDarkText = luminance == null ? true : luminance > 145;
+    // Opaque replacement style to hide source text under the box.
+    element.style.background = useDarkText ? "#f8fafc" : "#0f172a";
+    element.style.color = useDarkText ? "#0f172a" : "#f8fafc";
+    element.style.borderColor = useDarkText ? "#cbd5e1" : "#334155";
+    element.style.opacity = "1";
   }
 
   function cssEscape(s) {
@@ -823,13 +937,19 @@
           "sourceLanguage",
           "targetLanguage",
           "compactOverlayMode",
+          "replaceTextBlocks",
+          "autoTranslateThenEdit",
           "enableByDefault",
         ];
         let needsRestyle = false;
         for (const k of keys) {
           if (changes[k] && Object.prototype.hasOwnProperty.call(changes, k)) {
             settings[k] = changes[k].newValue;
-            if (k === "compactOverlayMode") {
+            if (
+              k === "compactOverlayMode" ||
+              k === "replaceTextBlocks" ||
+              k === "autoTranslateThenEdit"
+            ) {
               needsRestyle = true;
             }
           }
@@ -879,7 +999,11 @@
       const img = Array.from(document.images).find(
         (i) => i.src === message.payload.url
       );
-      if (img) overlayTranslations(img, message.payload.result);
+      if (img) {
+        overlayTranslations(img, message.payload.result, {
+          editable: Boolean(settings.autoTranslateThenEdit),
+        });
+      }
     }
     if (message.type === "MT_TRANSLATE_ALL_NOW") {
       translateOnce();

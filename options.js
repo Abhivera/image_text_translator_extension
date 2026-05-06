@@ -10,6 +10,8 @@ const DEFAULTS = {
   targetLanguage: "en",
   model: "gemini-1.5-flash",
   compactOverlayMode: false,
+  replaceTextBlocks: true,
+  autoTranslateThenEdit: true,
 };
 
 function getSettings() {
@@ -40,6 +42,10 @@ async function init() {
   document.getElementById("model").value = savedModel;
   const compactEl = document.getElementById("compactOverlayMode");
   if (compactEl) compactEl.checked = Boolean(s.compactOverlayMode);
+  const replaceEl = document.getElementById("replaceTextBlocks");
+  if (replaceEl) replaceEl.checked = Boolean(s.replaceTextBlocks);
+  const autoEditEl = document.getElementById("autoTranslateThenEdit");
+  if (autoEditEl) autoEditEl.checked = Boolean(s.autoTranslateThenEdit);
   updateProviderSections(document.getElementById("modelProvider").value, savedModel);
 }
 
@@ -94,6 +100,9 @@ async function save() {
     targetLanguage: document.getElementById("targetLanguage").value,
     model: document.getElementById("model").value,
     compactOverlayMode: document.getElementById("compactOverlayMode").checked,
+    replaceTextBlocks: document.getElementById("replaceTextBlocks").checked,
+    autoTranslateThenEdit: document.getElementById("autoTranslateThenEdit")
+      .checked,
   };
   await setSettings(payload);
   const status = document.getElementById("status");

@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS = {
   targetLanguage: "en",
   model: "gemini-1.5-flash",
   compactOverlayMode: false,
+  replaceTextBlocks: true,
+  autoTranslateThenEdit: true,
   autoTranslateAll: false,
   enableByDefault: false,
 };
@@ -414,15 +416,41 @@ function parseVisionResponse(content) {
   if (Array.isArray(parsed)) parsed = { texts: parsed };
   if (!parsed || !Array.isArray(parsed.texts)) parsed = { texts: [] };
 
+  const toPercentOrNull = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return null;
+    return Math.max(0, Math.min(100, num));
+  };
+  const normalizeBox = (item) => {
+    const x = toPercentOrNull(item?.x ?? item?.left);
+    const y = toPercentOrNull(item?.y ?? item?.top);
+    const width = toPercentOrNull(item?.width ?? item?.w);
+    const height = toPercentOrNull(item?.height ?? item?.h);
+    if (x == null || y == null || width == null || height == null) {
+      return { x: 0, y: 0, width: 0, height: 0 };
+    }
+    const maxWidth = Math.max(0, 100 - x);
+    const maxHeight = Math.max(0, 100 - y);
+    const safeWidth = Math.min(width, maxWidth);
+    const safeHeight = Math.min(height, maxHeight);
+    if (safeWidth <= 0.25 || safeHeight <= 0.25) {
+      return { x: 0, y: 0, width: 0, height: 0 };
+    }
+    return { x, y, width: safeWidth, height: safeHeight };
+  };
+
   const normalized = parsed.texts
-    .map((t) => ({
-      source: String(t?.source || t?.japanese || t?.original || t?.text || ""),
-      translation: String(t?.translation || t?.english || t?.translated || ""),
-      x: Math.max(0, Math.min(100, Number(t?.x ?? t?.left ?? 0))),
-      y: Math.max(0, Math.min(100, Number(t?.y ?? t?.top ?? 0))),
-      width: Math.max(0, Math.min(100, Number(t?.width ?? t?.w ?? 0))),
-      height: Math.max(0, Math.min(100, Number(t?.height ?? t?.h ?? 0))),
-    }))
+    .map((t) => {
+      const box = normalizeBox(t);
+      return {
+        source: String(t?.source || t?.japanese || t?.original || t?.text || ""),
+        translation: String(t?.translation || t?.english || t?.translated || ""),
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      };
+    })
     .filter((t) => t.translation.length > 0);
 
   if (normalized.length > 0) {

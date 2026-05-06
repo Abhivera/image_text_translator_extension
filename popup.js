@@ -10,6 +10,8 @@ const DEFAULTS = {
   targetLanguage: "en",
   model: "gemini-1.5-flash",
   compactOverlayMode: false,
+  replaceTextBlocks: true,
+  autoTranslateThenEdit: true,
   enableByDefault: false,
 };
 
@@ -85,7 +87,13 @@ async function init() {
     chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
   );
 
-  const toggleBtn = document.getElementById("toggleActive");
+  const toggleInput = document.getElementById("toggleActive");
+  const toggleStateText = document.getElementById("toggleStateText");
+  function updateTranslatorToggleUi(on) {
+    if (toggleInput) toggleInput.checked = Boolean(on);
+    if (toggleStateText) toggleStateText.textContent = on ? "On" : "Off";
+  }
+
   const translateOnceBtn = document.getElementById("translateOnce");
   const translateContinuousBtn = document.getElementById("translateContinuous");
   const modelProviderSelect = document.getElementById("modelProvider");
@@ -99,6 +107,10 @@ async function init() {
   const targetSelect = document.getElementById("targetLanguage");
   const modelSelect = document.getElementById("model");
   const compactOverlayModeInput = document.getElementById("compactOverlayMode");
+  const replaceTextBlocksInput = document.getElementById("replaceTextBlocks");
+  const autoTranslateThenEditInput = document.getElementById(
+    "autoTranslateThenEdit"
+  );
   const saveBtn = document.getElementById("saveSettings");
   const saveStatus = document.getElementById("saveStatus");
   const apiWarning = document.getElementById("apiWarning");
@@ -144,14 +156,13 @@ async function init() {
   }
 
   if (!tab?.id) {
-    toggleBtn.disabled = true;
+    toggleInput.disabled = true;
+    updateTranslatorToggleUi(false);
     if (translateOnceBtn) translateOnceBtn.disabled = true;
     if (translateContinuousBtn) translateContinuousBtn.disabled = true;
   } else {
     const current = await getActive(tab.id);
-    toggleBtn.textContent = current ? "Translator: On" : "Translator: Off";
-    toggleBtn.classList.remove("btn-red", "btn-green");
-    toggleBtn.classList.add(current ? "btn-green" : "btn-red");
+    updateTranslatorToggleUi(current);
 
     const cont = await getContinuous(tab.id);
     updateContinuousButtonUi(cont);
@@ -160,24 +171,29 @@ async function init() {
       currentSettings.modelProvider || "gemini"
     );
 
-    toggleBtn.addEventListener("click", async () => {
+    toggleInput.addEventListener("change", async () => {
       const now = await getActive(tab.id);
-      const next = !now;
+      const next = Boolean(toggleInput.checked);
       const final = await setActive(tab.id, next);
+      updateTranslatorToggleUi(final);
 
-      toggleBtn.textContent = final ? "Translator: On" : "Translator: Off";
-      toggleBtn.classList.remove("btn-red", "btn-green");
-      toggleBtn.classList.add(final ? "btn-green" : "btn-red");
-
-      window.close();
+      // If state update fails, keep UI in sync with actual tab state.
+      if (final !== next) {
+        const confirmed = await getActive(tab.id);
+        updateTranslatorToggleUi(confirmed);
+      }
     });
 
     translateOnceBtn.addEventListener("click", async () => {
+      const originalText = translateOnceBtn.textContent;
+      translateOnceBtn.disabled = true;
+      translateOnceBtn.textContent = "Translating...";
       const active = await getActive(tab.id);
       if (!active) {
         translateOnceBtn.textContent = "Turn Translator On first";
+        translateOnceBtn.disabled = false;
         setTimeout(() => {
-          translateOnceBtn.textContent = "Translate Once";
+          translateOnceBtn.textContent = originalText || "Translate Once";
         }, 1500);
         return;
       }
@@ -187,16 +203,23 @@ async function init() {
       const provider = latest.modelProvider || "gemini";
       if (!hasRequiredCredential(provider, latest)) {
         updateApiWarning(latest, provider);
+        translateOnceBtn.disabled = false;
+        translateOnceBtn.textContent = originalText || "Translate Once";
         return;
       }
       sendTranslateOnce(tab.id);
+      translateOnceBtn.textContent = "Translating...";
       window.close();
     });
 
     translateContinuousBtn.addEventListener("click", async () => {
+      const prevLabel = translateContinuousBtn.textContent;
+      translateContinuousBtn.disabled = true;
+      translateContinuousBtn.textContent = "Updating...";
       const active = await getActive(tab.id);
       if (!active) {
         translateContinuousBtn.textContent = "Turn Translator On first";
+        translateContinuousBtn.disabled = false;
         setTimeout(async () => {
           updateContinuousButtonUi(await getContinuous(tab.id));
         }, 1500);
@@ -208,10 +231,14 @@ async function init() {
       const provider = latest.modelProvider || "gemini";
       if (!hasRequiredCredential(provider, latest)) {
         updateApiWarning(latest, provider);
+        translateContinuousBtn.disabled = false;
+        translateContinuousBtn.textContent =
+          prevLabel || "Translate as I Scroll: Off";
         return;
       }
       const now = await getContinuous(tab.id);
       const resp = await setContinuous(tab.id, !now);
+      translateContinuousBtn.disabled = false;
       if (resp && resp.ok) {
         updateContinuousButtonUi(Boolean(resp.enabled));
       } else {
@@ -306,6 +333,14 @@ async function init() {
       currentSettings.compactOverlayMode
     );
   }
+  if (replaceTextBlocksInput) {
+    replaceTextBlocksInput.checked = Boolean(currentSettings.replaceTextBlocks);
+  }
+  if (autoTranslateThenEditInput) {
+    autoTranslateThenEditInput.checked = Boolean(
+      currentSettings.autoTranslateThenEdit
+    );
+  }
   
   // Add event listener for model provider changes
   if (modelProviderSelect) {
@@ -339,6 +374,8 @@ async function init() {
         targetLanguage: targetSelect?.value || "en",
         model: modelSelect?.value || "gemini-1.5-flash",
         compactOverlayMode: Boolean(compactOverlayModeInput?.checked),
+        replaceTextBlocks: Boolean(replaceTextBlocksInput?.checked),
+        autoTranslateThenEdit: Boolean(autoTranslateThenEditInput?.checked),
       };
       await new Promise((resolve) =>
         chrome.storage.local.set(payload, resolve)

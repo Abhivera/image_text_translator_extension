@@ -84,6 +84,74 @@
         gap: 10px;
         margin-top: 12px;
       }
+      .switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--sky-200);
+        border-radius: 10px;
+        background: #f8fbff;
+      }
+      .switch-label {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--gray-700);
+      }
+      .switch-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .switch-state {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--gray-600);
+        min-width: 26px;
+      }
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ef4444;
+        transition: 0.2s;
+        border-radius: 999px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: var(--white);
+        transition: 0.2s;
+        border-radius: 50%;
+      }
+      .switch input:checked + .slider {
+        background-color: #22c55e;
+      }
+      .switch input:focus-visible + .slider {
+        box-shadow: 0 0 0 3px var(--focus);
+      }
+      .switch input:checked + .slider:before {
+        transform: translateX(20px);
+      }
 /* Base outline style */
 .btn-toggle {
   flex: 1;
@@ -256,10 +324,15 @@
         </div>
         
 
-        <div class="row" style="margin-top: 14px">
-          <button id="toggleActive"  class="btn-toggle btn-red">
-            Translator: Off
-          </button>
+        <div class="switch-row">
+          <span class="switch-label">Translator</span>
+          <div class="switch-wrap">
+            <span id="toggleStateText" class="switch-state">Off</span>
+            <label class="switch" for="toggleActive">
+              <input id="toggleActive" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="row">
@@ -430,6 +503,24 @@
           >
             <input id="compactOverlayMode" type="checkbox" style="width: auto" />
             Compact overlay mode (for dense manga pages)
+          </label>
+        </div>
+        <div class="row" style="margin-top: 8px">
+          <label
+            for="replaceTextBlocks"
+            style="margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 600;"
+          >
+            <input id="replaceTextBlocks" type="checkbox" style="width: auto" />
+            Replace original text blocks (hide source text)
+          </label>
+        </div>
+        <div class="row" style="margin-top: 8px">
+          <label
+            for="autoTranslateThenEdit"
+            style="margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 600;"
+          >
+            <input id="autoTranslateThenEdit" type="checkbox" style="width: auto" />
+            Auto-translate then allow inline English edits
           </label>
         </div>
 
