@@ -8,6 +8,15 @@
   let isBulkTranslating = false;
   let bulkAbort = false;
   let isCurrentTabActive = true;
+  /** Session-only: translate images as they enter viewport while scrolling */
+  let isContinuousMode = false;
+  let scrollIntersectionObserver = null;
+  let domMutationTimer = null;
+  const CONCURRENCY = 3;
+  let lazyQueue = [];
+  let lazyQueueSet = new WeakSet();
+  let lazyActiveWorkers = 0;
+
   let settings = {
     modelProvider: "gemini",
     geminiApiKey: "",
@@ -19,9 +28,6 @@
     model: "gemini-1.5-flash",
     sourceLanguage: "ja",
     targetLanguage: "en",
-    overlayBgColor: "#ffffff",
-    overlayBgOpacity: 95,
-    overlayTextColor: "#111111",
     compactOverlayMode: false,
     autoTranslateAll: false,
     enableByDefault: false,
@@ -200,39 +206,196 @@
       badge.textContent = isTabEnabled ? "Translator: On" : "Translator: Off";
       if (isTabEnabled) {
         scanAllImages();
-        if (settings.autoTranslateAll) translateAllImages();
+        if (isContinuousMode) observeEligibleImagesForScroll();
       } else cleanupAll();
     });
     document.documentElement.appendChild(badge);
     return badge;
   }
 
-  function getOrCreateHud() {
+  function getOrCreateHud(mode) {
     let hud = document.getElementById(HUD_ID);
-    if (hud) return hud;
+    if (hud) {
+      hud.dataset.mtMode = mode || "once";
+      setHudMode(mode || "once");
+      return hud;
+    }
     hud = document.createElement("div");
     hud.id = HUD_ID;
+    hud.dataset.mtMode = mode || "once";
     hud.innerHTML = `
       <div class="mt-spinner" aria-hidden="true"></div>
       <div class="mt-text">Preparing…</div>
       <button class="mt-cancel" type="button">Cancel</button>
     `;
     hud.querySelector(".mt-cancel").addEventListener("click", () => {
-      bulkAbort = true;
+      const m = hud.dataset.mtMode;
+      if (m === "scroll") {
+        disableContinuousMode();
+      } else {
+        bulkAbort = true;
+      }
     });
     document.documentElement.appendChild(hud);
+    setHudMode(mode || "once");
     return hud;
   }
 
+  function setHudMode(mode) {
+    const hud = document.getElementById(HUD_ID);
+    if (hud) hud.dataset.mtMode = mode;
+    const btn = hud?.querySelector(".mt-cancel");
+    if (btn) btn.textContent = mode === "scroll" ? "Stop" : "Cancel";
+  }
+
   function updateHud(done, total) {
-    const hud = getOrCreateHud();
+    const hud = getOrCreateHud("once");
     const txt = hud.querySelector(".mt-text");
     if (txt) txt.textContent = `Translating images… ${done}/${total}`;
+  }
+
+  function updateScrollHud(message) {
+    const hud = getOrCreateHud("scroll");
+    setHudMode("scroll");
+    const txt = hud.querySelector(".mt-text");
+    if (txt) txt.textContent = message || "Translating as you scroll…";
+    const spin = hud.querySelector(".mt-spinner");
+    if (spin) spin.style.display = lazyQueue.length > 0 ? "block" : "none";
   }
 
   function hideHud() {
     const hud = document.getElementById(HUD_ID);
     if (hud) hud.remove();
+  }
+
+  async function translateSingleImage(img) {
+    let result;
+    const cached = urlToResultCache.get(img.src);
+    if (cached) {
+      result = cached;
+    } else {
+      const rect = img.getBoundingClientRect();
+      const elementRect = {
+        left: rect.left + window.scrollX,
+        top: rect.top + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      };
+      result = await translateImage(
+        img.src,
+        elementRect,
+        window.devicePixelRatio || 1
+      );
+      urlToResultCache.set(img.src, result);
+    }
+    overlayTranslations(img, result);
+    img.dataset.mangaTranslatorTranslated = "1";
+  }
+
+  function disconnectScrollObserver() {
+    if (scrollIntersectionObserver) {
+      scrollIntersectionObserver.disconnect();
+      scrollIntersectionObserver = null;
+    }
+  }
+
+  function ensureScrollObserver() {
+    if (scrollIntersectionObserver) return scrollIntersectionObserver;
+    scrollIntersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const img = entry.target;
+          if (!(img instanceof HTMLImageElement)) continue;
+          try {
+            scrollIntersectionObserver.unobserve(img);
+          } catch {}
+          enqueueLazyTranslate(img);
+        }
+      },
+      { root: null, rootMargin: "200px", threshold: 0.05 }
+    );
+    return scrollIntersectionObserver;
+  }
+
+  function observeEligibleImagesForScroll() {
+    if (!isContinuousMode || !isTabEnabled || !isCurrentTabActive) return;
+    const io = ensureScrollObserver();
+    eligibleImages().forEach((img) => {
+      if (img.dataset.mangaTranslatorTranslated === "1") return;
+      try {
+        io.observe(img);
+      } catch {}
+    });
+  }
+
+  function enqueueLazyTranslate(img) {
+    if (!isContinuousMode || !isTabEnabled || !isCurrentTabActive) return;
+    if (!img || !img.isConnected) return;
+    if (img.dataset.mangaTranslatorTranslated === "1") return;
+    if (img.width < 120 || img.height < 120) return;
+    if (lazyQueueSet.has(img)) return;
+    lazyQueueSet.add(img);
+    lazyQueue.push(img);
+    updateScrollHud();
+    pumpLazyQueue();
+  }
+
+  function pumpLazyQueue() {
+    while (
+      lazyActiveWorkers < CONCURRENCY &&
+      lazyQueue.length &&
+      isContinuousMode &&
+      isTabEnabled &&
+      isCurrentTabActive
+    ) {
+      const img = lazyQueue.shift();
+      if (img) {
+        try {
+          lazyQueueSet.delete(img);
+        } catch {}
+      }
+      if (!img || !img.isConnected) continue;
+      lazyActiveWorkers += 1;
+      translateSingleImage(img)
+        .catch((err) => console.warn("lazy translate error", err))
+        .finally(() => {
+          lazyActiveWorkers -= 1;
+          if (
+            isContinuousMode &&
+            isTabEnabled &&
+            isCurrentTabActive &&
+            img.isConnected &&
+            img.dataset.mangaTranslatorTranslated !== "1"
+          ) {
+            try {
+              ensureScrollObserver().observe(img);
+            } catch {}
+          }
+          updateScrollHud();
+          pumpLazyQueue();
+        });
+    }
+  }
+
+  function disableContinuousMode() {
+    isContinuousMode = false;
+    lazyQueue = [];
+    lazyQueueSet = new WeakSet();
+    disconnectScrollObserver();
+    const hud = document.getElementById(HUD_ID);
+    if (hud && hud.dataset.mtMode === "scroll") hideHud();
+  }
+
+  function enableContinuousMode() {
+    if (!isTabEnabled || !isCurrentTabActive) return;
+    isContinuousMode = true;
+    lazyQueue = [];
+    lazyQueueSet = new WeakSet();
+    getOrCreateHud("scroll");
+    setHudMode("scroll");
+    updateScrollHud("Translating as you scroll…");
+    observeEligibleImagesForScroll();
   }
 
   function addTranslateButton(img) {
@@ -275,20 +438,7 @@
       button.disabled = true;
       icon.classList.add("mt-rotating");
       try {
-        const rect = img.getBoundingClientRect();
-        const elementRect = {
-          left: rect.left + window.scrollX,
-          top: rect.top + window.scrollY,
-          width: rect.width,
-          height: rect.height,
-        };
-        const resp = await translateImage(
-          img.src,
-          elementRect,
-          window.devicePixelRatio || 1
-        );
-        overlayTranslations(img, resp);
-        img.dataset.mangaTranslatorTranslated = "1";
+        await translateSingleImage(img);
       } catch (err) {
         console.warn("translate error", err);
         alert(
@@ -380,7 +530,7 @@
       if (settings.compactOverlayMode) div.classList.add("mt-compact");
 
       div.textContent = t.translation;
-      applyOverlayColorStyles(div);
+      applyOverlayColorStyles(div, img, t);
       const hasXY = Number.isFinite(Number(t.x)) && Number.isFinite(Number(t.y));
       const widthPct = Number(t.width);
       const preferredLeft = hasXY
@@ -418,43 +568,52 @@
     }
   }
 
-  function hexToRgb(hex) {
-    if (!hex || typeof hex !== "string") return null;
-    let h = hex.trim();
-    if (h.startsWith("#")) h = h.slice(1);
-    if (h.length === 3) {
-      const r = parseInt(h[0] + h[0], 16);
-      const g = parseInt(h[1] + h[1], 16);
-      const b = parseInt(h[2] + h[2], 16);
-      if ([r, g, b].some((v) => Number.isNaN(v))) return null;
-      return { r, g, b };
+  function estimateImageLuminance(img, xPct, yPct) {
+    try {
+      if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+      const cx = Math.max(
+        1,
+        Math.min(img.naturalWidth - 2, Math.round((xPct / 100) * img.naturalWidth))
+      );
+      const cy = Math.max(
+        1,
+        Math.min(img.naturalHeight - 2, Math.round((yPct / 100) * img.naturalHeight))
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.drawImage(img, cx - 1, cy - 1, 2, 2, 0, 0, 1, 1);
+      const data = ctx.getImageData(0, 0, 1, 1).data;
+      return 0.2126 * data[0] + 0.7152 * data[1] + 0.0722 * data[2];
+    } catch {
+      return null;
     }
-    if (h.length === 6) {
-      const r = parseInt(h.slice(0, 2), 16);
-      const g = parseInt(h.slice(2, 4), 16);
-      const b = parseInt(h.slice(4, 6), 16);
-      if ([r, g, b].some((v) => Number.isNaN(v))) return null;
-      return { r, g, b };
-    }
-    return null;
   }
 
-  function applyOverlayColorStyles(element) {
+  function applyOverlayColorStyles(element, img, textItem) {
     if (!element) return;
-    try {
-      const alphaPct = Number(settings.overlayBgOpacity);
-      const alpha = isFinite(alphaPct)
-        ? Math.max(0, Math.min(100, alphaPct)) / 100
-        : 0.95;
-      const rgb = hexToRgb(settings.overlayBgColor || "#ffffff") || {
-        r: 255,
-        g: 255,
-        b: 255,
-      };
-      element.style.background = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-    } catch {}
-    if (settings.overlayTextColor) {
-      element.style.color = settings.overlayTextColor;
+    const centerX = Number.isFinite(Number(textItem?.x))
+      ? Number(textItem.x) + Number(textItem.width || 0) / 2
+      : 50;
+    const centerY = Number.isFinite(Number(textItem?.y))
+      ? Number(textItem.y) + Number(textItem.height || 0) / 2
+      : 50;
+    const luminance = estimateImageLuminance(img, centerX, centerY);
+    const useDarkOverlay =
+      luminance == null
+        ? !window.matchMedia("(prefers-color-scheme: dark)").matches
+        : luminance > 145;
+
+    if (useDarkOverlay) {
+      element.style.background = "rgba(15, 23, 42, 0.84)";
+      element.style.color = "#f8fafc";
+      element.style.borderColor = "rgba(148, 163, 184, 0.35)";
+    } else {
+      element.style.background = "rgba(248, 250, 252, 0.9)";
+      element.style.color = "#0f172a";
+      element.style.borderColor = "rgba(15, 23, 42, 0.24)";
     }
   }
 
@@ -480,6 +639,8 @@
   }
 
   function cleanupAll() {
+    disableContinuousMode();
+    bulkAbort = true;
     document.querySelectorAll(`.${BUTTON_CLASS}`).forEach((el) => el.remove());
     document.querySelectorAll(`.${OVERLAY_CLASS}`).forEach((el) => el.remove());
     Array.from(document.images).forEach((img) => {
@@ -489,9 +650,11 @@
     hideHud();
     isBulkTranslating = false;
     bulkAbort = false;
+    lazyActiveWorkers = 0;
   }
 
-  async function translateAllImages() {
+  /** One-shot: translate all eligible images currently in the document (this viewport load only). */
+  async function translateOnce() {
     if (!isTabEnabled || !isCurrentTabActive) return;
     if (isBulkTranslating) return;
     isBulkTranslating = true;
@@ -510,11 +673,10 @@
       return;
     }
 
-    getOrCreateHud();
+    getOrCreateHud("once");
+    setHudMode("once");
     updateHud(0, targets.length);
 
-    // Small worker pool for concurrency
-    const CONCURRENCY = 3;
     let done = 0;
     let idx = 0;
 
@@ -524,29 +686,9 @@
         if (i >= targets.length) break;
         const img = targets[i];
         try {
-          let result;
-          const cached = urlToResultCache.get(img.src);
-          if (cached) {
-            result = cached;
-          } else {
-            const rect = img.getBoundingClientRect();
-            const elementRect = {
-              left: rect.left + window.scrollX,
-              top: rect.top + window.scrollY,
-              width: rect.width,
-              height: rect.height,
-            };
-            result = await translateImage(
-              img.src,
-              elementRect,
-              window.devicePixelRatio || 1
-            );
-            urlToResultCache.set(img.src, result);
-          }
-          overlayTranslations(img, result);
-          img.dataset.mangaTranslatorTranslated = "1";
+          await translateSingleImage(img);
         } catch (err) {
-          console.warn("translate-all error", err);
+          console.warn("translate-once error", err);
         } finally {
           done += 1;
           updateHud(done, targets.length);
@@ -560,6 +702,12 @@
     hideHud();
     isBulkTranslating = false;
     bulkAbort = false;
+    if (isContinuousMode && isTabEnabled && isCurrentTabActive) {
+      getOrCreateHud("scroll");
+      setHudMode("scroll");
+      updateScrollHud("Translating as you scroll…");
+      observeEligibleImagesForScroll();
+    }
   }
 
   function translateImage(url, elementRect, pageScale) {
@@ -603,7 +751,7 @@
         }
         if (isTabEnabled && isCurrentTabActive) {
           scanAllImages();
-          if (settings.autoTranslateAll) translateAllImages();
+          if (isContinuousMode) observeEligibleImagesForScroll();
         } else cleanupAll();
       }
     });
@@ -612,12 +760,22 @@
   function handleTabVisibilityChange() {
     isCurrentTabActive = !document.hidden;
     if (!isCurrentTabActive) {
-      // Clean up when tab becomes inactive
-      cleanupAll();
+      disconnectScrollObserver();
+      bulkAbort = true;
+      lazyQueue = [];
+      lazyQueueSet = new WeakSet();
+      const hud = document.getElementById(HUD_ID);
+      if (hud && hud.dataset.mtMode === "scroll") hideHud();
+      isBulkTranslating = false;
+      bulkAbort = false;
     } else if (isTabEnabled) {
-      // Re-scan when tab becomes active again
       scanAllImages();
-      if (settings.autoTranslateAll) translateAllImages();
+      if (isContinuousMode) {
+        getOrCreateHud("scroll");
+        setHudMode("scroll");
+        updateScrollHud("Translating as you scroll…");
+        observeEligibleImagesForScroll();
+      }
     }
   }
 
@@ -633,12 +791,17 @@
     notifyActiveChanged();
     if (isTabEnabled && isCurrentTabActive) {
       scanAllImages();
-      if (settings.autoTranslateAll) translateAllImages();
     }
 
     const observer = new MutationObserver(() => {
-      scanAllImages();
-      if (settings.autoTranslateAll) translateAllImages();
+      if (domMutationTimer) clearTimeout(domMutationTimer);
+      domMutationTimer = setTimeout(() => {
+        domMutationTimer = null;
+        scanAllImages();
+        if (isContinuousMode && isTabEnabled && isCurrentTabActive) {
+          observeEligibleImagesForScroll();
+        }
+      }, 250);
     });
     observer.observe(document.documentElement, {
       childList: true,
@@ -659,29 +822,34 @@
           "model",
           "sourceLanguage",
           "targetLanguage",
-          "overlayBgColor",
-          "overlayBgOpacity",
-          "overlayTextColor",
           "compactOverlayMode",
-          "autoTranslateAll",
           "enableByDefault",
         ];
         let needsRestyle = false;
         for (const k of keys) {
           if (changes[k] && Object.prototype.hasOwnProperty.call(changes, k)) {
             settings[k] = changes[k].newValue;
-            if (
-              k === "overlayBgColor" ||
-              k === "overlayBgOpacity" ||
-              k === "overlayTextColor"
-            ) {
+            if (k === "compactOverlayMode") {
               needsRestyle = true;
             }
           }
         }
         if (needsRestyle) {
           document.querySelectorAll(`.${OVERLAY_CLASS}`).forEach((el) => {
-            applyOverlayColorStyles(el);
+            const url = el.dataset.for;
+            const img = url
+              ? Array.from(document.images).find((i) => i.src === url)
+              : null;
+            if (settings.compactOverlayMode) el.classList.add("mt-compact");
+            else el.classList.remove("mt-compact");
+            if (img) {
+              applyOverlayColorStyles(el, img, {
+                x: 50,
+                y: 50,
+                width: 10,
+                height: 10,
+              });
+            }
           });
         }
       });
@@ -714,7 +882,7 @@
       if (img) overlayTranslations(img, message.payload.result);
     }
     if (message.type === "MT_TRANSLATE_ALL_NOW") {
-      translateAllImages();
+      translateOnce();
     }
   });
 
@@ -723,6 +891,34 @@
     if (!message || !message.type) return;
     if (message.type === "MT_GET_ACTIVE") {
       sendResponse({ ok: true, active: isTabEnabled });
+      return;
+    }
+    if (message.type === "MT_GET_CONTINUOUS") {
+      sendResponse({ ok: true, enabled: isContinuousMode });
+      return;
+    }
+    if (message.type === "MT_SET_CONTINUOUS") {
+      const want = Boolean(message.enabled);
+      if (want && (!isTabEnabled || !isCurrentTabActive)) {
+        sendResponse({
+          ok: false,
+          enabled: false,
+          error: "Turn Translator on for this tab first.",
+        });
+        return;
+      }
+      if (want) enableContinuousMode();
+      else disableContinuousMode();
+      sendResponse({ ok: true, enabled: isContinuousMode });
+      return;
+    }
+    if (message.type === "MT_TRANSLATE_ONCE") {
+      if (!isTabEnabled || !isCurrentTabActive) {
+        sendResponse({ ok: false, error: "Translator is off or tab inactive." });
+        return;
+      }
+      translateOnce();
+      sendResponse({ ok: true });
       return;
     }
     if (message.type === "MT_SET_ACTIVE") {
@@ -738,7 +934,7 @@
         }
         if (isTabEnabled && isCurrentTabActive) {
           scanAllImages();
-          if (settings.autoTranslateAll) translateAllImages();
+          if (isContinuousMode) observeEligibleImagesForScroll();
         } else {
           cleanupAll();
         }

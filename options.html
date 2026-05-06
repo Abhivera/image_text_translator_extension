@@ -133,29 +133,14 @@
         <option value="llava:latest" data-provider="ollama" style="display: none">llava:latest</option>
       </select>
 
-      <div class="row" style="margin-top: 8px">
-        <div>
-          <label for="overlayBgColor">Overlay Background Color</label>
-          <input id="overlayBgColor" type="color" />
-        </div>
-        <div>
-          <label for="overlayTextColor">Overlay Text Color</label>
-          <input id="overlayTextColor" type="color" />
-        </div>
-      </div>
-
-      <label for="overlayBgOpacity">Overlay Background Opacity</label>
-      <input id="overlayBgOpacity" type="range" min="0" max="100" step="5" />
       <p class="hint">
-        Higher opacity makes the translation background more solid.
+        Overlay text and background colors are detected automatically for readability.
       </p>
 
-      <div class="switch">
-        <input id="autoTranslateAll" type="checkbox" />
-        <label for="autoTranslateAll" style="margin: 0"
-          >Automatically translate all images on the page</label
-        >
-      </div>
+      <p class="hint">
+        Use the extension popup: <strong>Translate Once</strong> for the current page, or
+        <strong>Translate as I Scroll</strong> for infinite / lazy-loaded pages.
+      </p>
       <div class="switch">
         <input id="compactOverlayMode" type="checkbox" />
         <label for="compactOverlayMode" style="margin: 0"

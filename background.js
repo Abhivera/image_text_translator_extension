@@ -14,9 +14,6 @@ const DEFAULT_SETTINGS = {
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
-  overlayBgColor: "#ffffff",
-  overlayBgOpacity: 95,
-  overlayTextColor: "#111111",
   compactOverlayMode: false,
   autoTranslateAll: false,
   enableByDefault: false,
@@ -721,6 +718,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     return;
   }
 
+  // One-shot: translate all images currently in the document (same as popup "Translate Once").
   if (info.menuItemId === "translate-all-images") {
     try {
       await chrome.tabs.sendMessage(tab.id, { type: "MT_TRANSLATE_ALL_NOW" });

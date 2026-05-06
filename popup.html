@@ -184,6 +184,28 @@
       .muted {
         color: var(--gray-500);
       }
+      .alert {
+        margin-top: 10px;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        border: 1px solid #fcd34d;
+        background: #fffbeb;
+        color: #92400e;
+        display: none;
+      }
+      .alert.show {
+        display: block;
+      }
+      .hint-card {
+        margin-top: 10px;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        border: 1px solid var(--sky-200);
+        background: #f8fbff;
+        color: var(--gray-700);
+      }
 
       /* Quick settings form styles */
       label {
@@ -195,7 +217,6 @@
       }
       input[type="text"],
       input[type="password"],
-      input[type="color"],
       select {
         width: 100%;
         box-sizing: border-box;
@@ -205,13 +226,6 @@
         font-size: 13px;
         background: var(--white);
         color: var(--gray-800);
-      }
-      input[type="color"] {
-        padding: 0;
-        height: 36px;
-      }
-      input[type="range"] {
-        width: 100%;
       }
       .label-row {
         display: flex;
@@ -249,10 +263,16 @@
         </div>
 
         <div class="row">
-          <button id="translateAll" class="btn btn-primary">
-            Translate All Texts
+          <button id="translateOnce" class="btn btn-primary">
+            Translate Once
           </button>
         </div>
+        <div class="row">
+          <button id="translateContinuous" class="btn-toggle btn-red" type="button">
+            Translate as I Scroll: Off
+          </button>
+        </div>
+        <div id="apiWarning" class="alert"></div>
 
         <div class="row">
           <span class="badge">
@@ -260,8 +280,9 @@
           </span>
         </div>
 
-        <div class="subtext muted" style="margin-top: 10px">
-          Tip: Select your preferred AI provider and configure API keys in settings.
+        <div class="hint-card">
+          Tip: Use <strong>Translate Once</strong> for current content, and
+          <strong>Translate as I Scroll</strong> for infinite scrolling pages.
         </div>
       </div>
 
@@ -399,24 +420,9 @@
           <option value="llama3.2-vision:latest" data-provider="ollama" style="display: none">llama3.2-vision:latest</option>
         </select>
 
-        <div class="row" style="margin-top: 10px">
-          <div style="flex: 1">
-            <label for="overlayBgColor">Overlay Background Color</label>
-            <input id="overlayBgColor" type="color" />
-          </div>
-          <div style="flex: 1">
-            <label for="overlayTextColor">Overlay Text Color</label>
-            <input id="overlayTextColor" type="color" />
-          </div>
+        <div class="subtext" style="margin-top: 10px">
+          Overlay style is automatic (smart contrast text/background).
         </div>
-
-        <div class="label-row">
-          <label for="overlayBgOpacity" style="margin: 0"
-            >Overlay Background Opacity</label
-          >
-          <span id="opacityValue" class="value-pill">95%</span>
-        </div>
-        <input id="overlayBgOpacity" type="range" min="0" max="100" step="5" />
         <div class="row" style="margin-top: 8px">
           <label
             for="compactOverlayMode"

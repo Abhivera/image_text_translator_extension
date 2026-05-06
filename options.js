@@ -9,11 +9,7 @@ const DEFAULTS = {
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
-  overlayBgColor: "#ffffff",
-  overlayBgOpacity: 95,
-  overlayTextColor: "#111111",
   compactOverlayMode: false,
-  autoTranslateAll: false,
 };
 
 function getSettings() {
@@ -42,20 +38,6 @@ async function init() {
   document.getElementById("targetLanguage").value = s.targetLanguage || "en";
   const savedModel = s.model || "gemini-1.5-flash";
   document.getElementById("model").value = savedModel;
-  const bg = s.overlayBgColor || DEFAULTS.overlayBgColor;
-  const txt = s.overlayTextColor || DEFAULTS.overlayTextColor;
-  const op =
-    typeof s.overlayBgOpacity === "number"
-      ? s.overlayBgOpacity
-      : DEFAULTS.overlayBgOpacity;
-  const bgEl = document.getElementById("overlayBgColor");
-  const txtEl = document.getElementById("overlayTextColor");
-  const opEl = document.getElementById("overlayBgOpacity");
-  if (bgEl) bgEl.value = bg;
-  if (txtEl) txtEl.value = txt;
-  if (opEl) opEl.value = String(op);
-  const autoEl = document.getElementById("autoTranslateAll");
-  if (autoEl) autoEl.checked = Boolean(s.autoTranslateAll);
   const compactEl = document.getElementById("compactOverlayMode");
   if (compactEl) compactEl.checked = Boolean(s.compactOverlayMode);
   updateProviderSections(document.getElementById("modelProvider").value, savedModel);
@@ -111,19 +93,7 @@ async function save() {
     sourceLanguage: document.getElementById("sourceLanguage").value,
     targetLanguage: document.getElementById("targetLanguage").value,
     model: document.getElementById("model").value,
-    overlayBgColor:
-      document.getElementById("overlayBgColor").value ||
-      DEFAULTS.overlayBgColor,
-    overlayTextColor:
-      document.getElementById("overlayTextColor").value ||
-      DEFAULTS.overlayTextColor,
-    overlayBgOpacity: parseInt(
-      document.getElementById("overlayBgOpacity").value ||
-        DEFAULTS.overlayBgOpacity,
-      10
-    ),
     compactOverlayMode: document.getElementById("compactOverlayMode").checked,
-    autoTranslateAll: document.getElementById("autoTranslateAll").checked,
   };
   await setSettings(payload);
   const status = document.getElementById("status");

@@ -9,11 +9,7 @@ const DEFAULTS = {
   sourceLanguage: "ja",
   targetLanguage: "en",
   model: "gemini-1.5-flash",
-  overlayBgColor: "#ffffff",
-  overlayBgOpacity: 95,
-  overlayTextColor: "#111111",
   compactOverlayMode: false,
-  autoTranslateAll: false,
   enableByDefault: false,
 };
 
@@ -47,17 +43,48 @@ function setActive(tabId, active) {
   });
 }
 
-function sendTranslateAll(tabId) {
+function sendTranslateOnce(tabId) {
   chrome.tabs
-    .sendMessage(tabId, { type: "MT_TRANSLATE_ALL_NOW" })
+    .sendMessage(tabId, { type: "MT_TRANSLATE_ONCE" })
     .catch(() => {});
+}
+
+function getContinuous(tabId) {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: "MT_GET_CONTINUOUS" }, (resp) => {
+        if (chrome.runtime.lastError) return resolve(false);
+        resolve(Boolean(resp && resp.ok && resp.enabled));
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+function setContinuous(tabId, enabled) {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: "MT_SET_CONTINUOUS", enabled },
+        (resp) => {
+          if (chrome.runtime.lastError) return resolve({ ok: false });
+          resolve(resp || { ok: false });
+        }
+      );
+    } catch {
+      resolve({ ok: false });
+    }
+  });
 }
 
 async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   const toggleBtn = document.getElementById("toggleActive");
-  const translateAllBtn = document.getElementById("translateAll");
+  const translateOnceBtn = document.getElementById("translateOnce");
+  const translateContinuousBtn = document.getElementById("translateContinuous");
   const modelProviderSelect = document.getElementById("modelProvider");
   const geminiApiKeyInput = document.getElementById("geminiApiKey");
   const openaiApiKeyInput = document.getElementById("openaiApiKey");
@@ -68,39 +95,128 @@ async function init() {
   const sourceSelect = document.getElementById("sourceLanguage");
   const targetSelect = document.getElementById("targetLanguage");
   const modelSelect = document.getElementById("model");
-  const bgInput = document.getElementById("overlayBgColor");
-  const textInput = document.getElementById("overlayTextColor");
-  const opacityInput = document.getElementById("overlayBgOpacity");
-  const opacityValue = document.getElementById("opacityValue");
   const compactOverlayModeInput = document.getElementById("compactOverlayMode");
   const saveBtn = document.getElementById("saveSettings");
   const saveStatus = document.getElementById("saveStatus");
+  const apiWarning = document.getElementById("apiWarning");
+
+  function updateContinuousButtonUi(on) {
+    if (!translateContinuousBtn) return;
+    translateContinuousBtn.textContent = on
+      ? "Translate as I Scroll: On"
+      : "Translate as I Scroll: Off";
+    translateContinuousBtn.classList.remove("btn-red", "btn-green");
+    translateContinuousBtn.classList.add(on ? "btn-green" : "btn-red");
+  }
+
+  function providerLabel(provider) {
+    const map = {
+      gemini: "Gemini",
+      openai: "OpenAI",
+      deepseek: "DeepSeek",
+      groq: "Groq",
+      ollama: "Ollama",
+    };
+    return map[provider] || String(provider || "Provider");
+  }
+
+  function hasRequiredCredential(provider, current) {
+    if (provider === "ollama") return true; // local endpoint; key optional
+    const keyName = `${provider}ApiKey`;
+    return Boolean(String(current?.[keyName] || "").trim());
+  }
+
+  function updateApiWarning(current, activeProvider) {
+    if (!apiWarning) return;
+    const provider = activeProvider || current?.modelProvider || "gemini";
+    if (!hasRequiredCredential(provider, current)) {
+      apiWarning.textContent = `${providerLabel(
+        provider
+      )} API key is missing. Add it in Settings before translating.`;
+      apiWarning.classList.add("show");
+    } else {
+      apiWarning.textContent = "";
+      apiWarning.classList.remove("show");
+    }
+  }
 
   if (!tab?.id) {
     toggleBtn.disabled = true;
-    translateAllBtn.disabled = true;
+    if (translateOnceBtn) translateOnceBtn.disabled = true;
+    if (translateContinuousBtn) translateContinuousBtn.disabled = true;
   } else {
     const current = await getActive(tab.id);
-toggleBtn.textContent = current ? "Translator: On" : "Translator: Off";
-toggleBtn.classList.remove("btn-red", "btn-green");
-toggleBtn.classList.add(current ? "btn-green" : "btn-red");
+    toggleBtn.textContent = current ? "Translator: On" : "Translator: Off";
+    toggleBtn.classList.remove("btn-red", "btn-green");
+    toggleBtn.classList.add(current ? "btn-green" : "btn-red");
 
-toggleBtn.addEventListener("click", async () => {
-  const now = await getActive(tab.id);
-  const next = !now;
-  const final = await setActive(tab.id, next);
+    const cont = await getContinuous(tab.id);
+    updateContinuousButtonUi(cont);
+    updateApiWarning(
+      currentSettings,
+      currentSettings.modelProvider || "gemini"
+    );
 
-  toggleBtn.textContent = final ? "Translator: On" : "Translator: Off";
-  toggleBtn.classList.remove("btn-red", "btn-green");
-  toggleBtn.classList.add(final ? "btn-green" : "btn-red");
+    toggleBtn.addEventListener("click", async () => {
+      const now = await getActive(tab.id);
+      const next = !now;
+      const final = await setActive(tab.id, next);
 
-  window.close();
-});
+      toggleBtn.textContent = final ? "Translator: On" : "Translator: Off";
+      toggleBtn.classList.remove("btn-red", "btn-green");
+      toggleBtn.classList.add(final ? "btn-green" : "btn-red");
 
-
-    translateAllBtn.addEventListener("click", () => {
-      sendTranslateAll(tab.id);
       window.close();
+    });
+
+    translateOnceBtn.addEventListener("click", async () => {
+      const active = await getActive(tab.id);
+      if (!active) {
+        translateOnceBtn.textContent = "Turn Translator On first";
+        setTimeout(() => {
+          translateOnceBtn.textContent = "Translate Once";
+        }, 1500);
+        return;
+      }
+      const latest = await new Promise((resolve) =>
+        chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
+      );
+      const provider = latest.modelProvider || "gemini";
+      if (!hasRequiredCredential(provider, latest)) {
+        updateApiWarning(latest, provider);
+        return;
+      }
+      sendTranslateOnce(tab.id);
+      window.close();
+    });
+
+    translateContinuousBtn.addEventListener("click", async () => {
+      const active = await getActive(tab.id);
+      if (!active) {
+        translateContinuousBtn.textContent = "Turn Translator On first";
+        setTimeout(async () => {
+          updateContinuousButtonUi(await getContinuous(tab.id));
+        }, 1500);
+        return;
+      }
+      const latest = await new Promise((resolve) =>
+        chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
+      );
+      const provider = latest.modelProvider || "gemini";
+      if (!hasRequiredCredential(provider, latest)) {
+        updateApiWarning(latest, provider);
+        return;
+      }
+      const now = await getContinuous(tab.id);
+      const resp = await setContinuous(tab.id, !now);
+      if (resp && resp.ok) {
+        updateContinuousButtonUi(Boolean(resp.enabled));
+      } else {
+        translateContinuousBtn.textContent = "Could not update";
+        setTimeout(async () => {
+          updateContinuousButtonUi(await getContinuous(tab.id));
+        }, 1500);
+      }
     });
   }
 
@@ -186,18 +302,6 @@ toggleBtn.addEventListener("click", async () => {
   if (targetSelect) targetSelect.value = currentSettings.targetLanguage || "en";
   if (modelSelect)
     modelSelect.value = currentSettings.model || "gemini-1.5-flash";
-  if (bgInput) bgInput.value = currentSettings.overlayBgColor || "#ffffff";
-  if (textInput)
-    textInput.value = currentSettings.overlayTextColor || "#111111";
-  if (opacityInput)
-    opacityInput.value = String(
-      typeof currentSettings.overlayBgOpacity === "number"
-        ? currentSettings.overlayBgOpacity
-        : 95
-    );
-  if (opacityValue && opacityInput) {
-    opacityValue.textContent = `${opacityInput.value}%`;
-  }
   if (compactOverlayModeInput) {
     compactOverlayModeInput.checked = Boolean(
       currentSettings.compactOverlayMode
@@ -208,6 +312,15 @@ toggleBtn.addEventListener("click", async () => {
   if (modelProviderSelect) {
     modelProviderSelect.addEventListener("change", () => {
       updateApiKeySections(modelProviderSelect.value, "");
+      const snapshot = {
+        modelProvider: modelProviderSelect.value,
+        geminiApiKey: geminiApiKeyInput?.value || "",
+        openaiApiKey: openaiApiKeyInput?.value || "",
+        deepseekApiKey: deepseekApiKeyInput?.value || "",
+        groqApiKey: groqApiKeyInput?.value || "",
+        ollamaApiKey: ollamaApiKeyInput?.value || "",
+      };
+      updateApiWarning(snapshot, modelProviderSelect.value);
     });
   }
 
@@ -226,14 +339,12 @@ toggleBtn.addEventListener("click", async () => {
         sourceLanguage: sourceSelect?.value || "ja",
         targetLanguage: targetSelect?.value || "en",
         model: modelSelect?.value || "gemini-1.5-flash",
-        overlayBgColor: bgInput?.value || "#ffffff",
-        overlayTextColor: textInput?.value || "#111111",
-        overlayBgOpacity: parseInt(opacityInput?.value || "95", 10),
         compactOverlayMode: Boolean(compactOverlayModeInput?.checked),
       };
       await new Promise((resolve) =>
         chrome.storage.local.set(payload, resolve)
       );
+      updateApiWarning(payload, payload.modelProvider);
       if (saveStatus) {
         saveStatus.textContent = "Saved";
         setTimeout(() => (saveStatus.textContent = ""), 1200);
@@ -241,11 +352,6 @@ toggleBtn.addEventListener("click", async () => {
     });
   }
 
-  if (opacityInput && opacityValue) {
-    opacityInput.addEventListener("input", () => {
-      opacityValue.textContent = `${opacityInput.value}%`;
-    });
-  }
 }
 
 if (document.readyState === "loading") {
