@@ -20,6 +20,7 @@ function getActive(tabId) {
   return new Promise((resolve) => {
     try {
       chrome.tabs.sendMessage(tabId, { type: "MT_GET_ACTIVE" }, (resp) => {
+        if (chrome.runtime.lastError) return resolve(false);
         resolve(Boolean(resp && resp.active));
       });
     } catch {
@@ -35,6 +36,7 @@ function setActive(tabId, active) {
         tabId,
         { type: "MT_SET_ACTIVE", active },
         (resp) => {
+          if (chrome.runtime.lastError) return resolve(false);
           resolve(Boolean(resp && resp.active));
         }
       );
@@ -143,8 +145,14 @@ toggleBtn.addEventListener("click", async () => {
     };
     
     if (modelSelect && defaultModels[provider]) {
+      const isPreferredForProvider = Boolean(
+        preferredModel &&
+          modelSelect.querySelector(
+            `option[data-provider="${provider}"][value="${preferredModel}"]`
+          )
+      );
       modelSelect.value =
-        preferredModel && modelSelect.querySelector(`option[value="${preferredModel}"]`)
+        isPreferredForProvider
           ? preferredModel
           : defaultModels[provider];
     }

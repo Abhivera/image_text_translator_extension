@@ -26,6 +26,13 @@ const tabSparkleIntervals = new Map();
 
 // Track per-tab translator enabled state
 const tabEnabledState = new Map();
+const DEFAULT_MODEL_BY_PROVIDER = {
+  gemini: "gemini-1.5-flash",
+  openai: "gpt-4o-mini",
+  deepseek: "deepseek-chat",
+  groq: "meta-llama/llama-4-scout-17b-16e-instruct",
+  ollama: "llava:latest",
+};
 
 function stopSparkle(tabId) {
   const h = tabSparkleIntervals.get(tabId);
@@ -493,6 +500,8 @@ async function callGeminiVision({
 async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguage) {
   const { modelProvider } = settings;
   const apiKey = settings[`${modelProvider}ApiKey`];
+  const selectedModel =
+    settings.model || DEFAULT_MODEL_BY_PROVIDER[modelProvider] || DEFAULT_SETTINGS.model;
   
   if (modelProvider !== "ollama" && !apiKey) {
     throw new Error(`Missing ${modelProvider.toUpperCase()} API key. Set it in the Settings.`);
@@ -502,7 +511,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
     case "gemini":
       return await callGeminiVision({
         apiKey,
-        model: settings.model || DEFAULT_SETTINGS.model,
+        model: selectedModel,
         base64,
         mime,
         sourceLanguage,
@@ -511,7 +520,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
     case "openai":
       return await callOpenAI({
         apiKey,
-        model: settings.model || "gpt-4o-mini",
+        model: selectedModel,
         base64,
         mime,
         sourceLanguage,
@@ -520,7 +529,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
     case "deepseek":
       return await callDeepSeek({
         apiKey,
-        model: settings.model || "deepseek-chat",
+        model: selectedModel,
         base64,
         mime,
         sourceLanguage,
@@ -529,7 +538,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
     case "groq":
       return await callGroq({
         apiKey,
-        model: settings.model || "meta-llama/llama-4-scout-17b-16e-instruct",
+        model: selectedModel,
         base64,
         mime,
         sourceLanguage,
@@ -538,7 +547,7 @@ async function callAIModel(settings, base64, mime, sourceLanguage, targetLanguag
     case "ollama":
       return await callOllama({
         apiKey,
-        model: settings.model || "llava:latest",
+        model: selectedModel,
         base64,
         sourceLanguage,
         targetLanguage,
@@ -553,7 +562,7 @@ chrome.runtime.onInstalled.addListener(() => {
   try {
     chrome.contextMenus.create({
       id: "translate-image",
-      title: "Translate image with Gemini",
+      title: "Translate image",
       contexts: ["image"],
     });
   } catch {}

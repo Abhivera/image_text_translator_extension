@@ -165,7 +165,7 @@
       isTabEnabled = !isTabEnabled;
       notifyActiveChanged();
       badge.textContent = isTabEnabled ? "Translator: On" : "Translator: Off";
-      if (isActive) {
+      if (isTabEnabled) {
         scanAllImages();
         if (settings.autoTranslateAll) translateAllImages();
       } else cleanupAll();
@@ -472,6 +472,9 @@
           },
         },
         (resp) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
           if (!resp || !resp.ok)
             return reject(
               new Error(resp && resp.error ? resp.error : "Unknown error")

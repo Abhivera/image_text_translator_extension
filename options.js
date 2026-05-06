@@ -82,8 +82,14 @@ function updateProviderSections(provider, preferredModel) {
     const p = option.getAttribute("data-provider");
     option.style.display = p === provider ? "block" : "none";
   });
+  const isPreferredForProvider = Boolean(
+    preferredModel &&
+      modelSelect.querySelector(
+        `option[data-provider="${provider}"][value="${preferredModel}"]`
+      )
+  );
   modelSelect.value =
-    preferredModel && modelSelect.querySelector(`option[value="${preferredModel}"]`)
+    isPreferredForProvider
       ? preferredModel
       : defaultModels[provider] || "gemini-1.5-flash";
 }
