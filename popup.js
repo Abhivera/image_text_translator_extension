@@ -81,6 +81,9 @@ function setContinuous(tabId, enabled) {
 
 async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const currentSettings = await new Promise((resolve) =>
+    chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
+  );
 
   const toggleBtn = document.getElementById("toggleActive");
   const translateOnceBtn = document.getElementById("translateOnce");
@@ -277,10 +280,6 @@ async function init() {
   }
 
   // Load current settings into quick settings form
-  const currentSettings = await new Promise((resolve) =>
-    chrome.storage.local.get(DEFAULTS, (items) => resolve(items))
-  );
-  
   if (modelProviderSelect) {
     modelProviderSelect.value = currentSettings.modelProvider || "gemini";
     updateApiKeySections(
